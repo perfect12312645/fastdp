@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bufio"
+	. "fastdp/pkg/flags"
 	"fmt"
 	"os"
 	"regexp"
@@ -31,7 +32,7 @@ func parseHostsFile(path string) ([]*HostGroup, error) {
 	var currentGroup *HostGroup
 
 	// 正则：匹配 [组名] 格式（如 [centos]）
-	groupRegex := regexp.MustCompile(`^\[(.*)\]$`)
+	groupRegex := regexp.MustCompile(`^\[(.+)\]$`)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -65,9 +66,6 @@ func parseHostsFile(path string) ([]*HostGroup, error) {
 
 		// 分割行：第一个元素是主机地址，剩下的是 key=value 参数
 		parts := strings.Fields(line) // 按空格分割（自动处理多个空格）
-		if len(parts) == 0 {
-			continue // 空行已跳过，这里理论不会触发
-		}
 
 		hostAddress := parts[0]
 		hostParams := make(map[string]string)
@@ -103,13 +101,12 @@ func HostParse(host string) ([]*HostGroup, error) {
 	// 解析配置文件（假设文件名为 fastdp.hosts）
 	groups, err := parseHostsFile(host)
 	if err != nil {
-		fmt.Printf("解析错误: %v\n", err)
 		return nil, err
 	}
 
 	// 打印解析结果
 	for _, group := range groups {
-		fmt.Printf("组名: %s\n", group.Name)
+		Logger.Sugar().Debugf("主机组:%s", group.Name)
 		for _, host := range group.Hosts {
 			if _, ok := host.Params["port"]; !ok {
 				host.Params["port"] = "22" // 默认端口
@@ -117,14 +114,49 @@ func HostParse(host string) ([]*HostGroup, error) {
 			if _, ok := host.Params["user"]; !ok {
 				host.Params["user"] = "root" // 默认用户
 			}
-			if _, ok := host.Params["password"]; !ok {
-				host.Params["password"] = "123456" // 默认用户
-			}
-			fmt.Printf("  主机: %s\n", host.Address)
-			fmt.Printf("  参数: %v\n", host.Params)
-
+			Logger.Sugar().Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"])
 		}
-
 	}
 	return groups, err
+}
+
+// 获取将要执行的主机组
+func Inventory(Args []string, groups []*HostGroup) []*HostGroup {
+	if len(Args) == 0 {
+		Errorf("ERROR: 请指定目标主机组")
+	}
+
+	// 优化 groupMap：键为组名，值为对应的 HostGroup 实例（便于快速查找）
+	groupMap := make(map[string]*HostGroup)
+	for _, g := range groups {
+		groupMap[g.Name] = g // 存储组名到 HostGroup 的映射
+	}
+
+	var inventory []*HostGroup
+	hasAll := false
+
+	for _, arg := range Args {
+		if arg == "all" {
+			hasAll = true
+			break // 遇到 "all" 无需继续检查其他参数
+		}
+
+		// 从 groupMap 中查找对应的 HostGroup
+		g, exists := groupMap[arg]
+		if !exists {
+			//Logger.Sugar().Warnf("忽略未知的主机组: %s", arg)
+			Errorf("忽略未知的主机组: %s", arg)
+			continue
+		}
+
+		// 添加找到的 HostGroup 到结果中
+		inventory = append(inventory, g)
+	}
+
+	// 如果指定了 "all"，直接返回所有主机组
+	if hasAll {
+		return groups
+	}
+
+	return inventory
 }
