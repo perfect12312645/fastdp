@@ -42,7 +42,8 @@ func execute(hostSessions []HostSession, flags *Flags, mod module.Module) {
 				Unchangedf("host:%s 执行成功 output:\n%s\n", addr, result.Output)
 			}
 		} else {
-			Errorf("host:%s 执行失败 output:\n%s\n", addr, result.Error)
+			Errorf("host:%s 执行失败\nSTDOUT:\n%s\nSTDERR:\n%s\n",
+				addr, result.Output, result.Error)
 		}
 	}
 }
@@ -56,6 +57,9 @@ func main() {
 	groups, err := HostParse(hostInventory)
 	if err != nil {
 		panic(err)
+	}
+	if len(groups) == 0 {
+		Errorf("主机组为空，请配置host文件：%s", hostInventory)
 	}
 	// 获取将要执行的主机组
 	inventory := Inventory(remainingArgs, groups)
