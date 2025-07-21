@@ -37,19 +37,19 @@ func (m *CopyModule) Run(hs HostSession, flags *Flags) Result {
 	src, srcExists := params["src"]
 	dest, destExists := params["dest"]
 	//content, contentExists := params["content"]
-	if !filepath.IsAbs(dest) {
-		return Result{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Sprintf("目标文件位置必须输入绝对路径，当前输入为:%s", dest),
-			Change:  false,
-		}
-	}
 	if !destExists || !srcExists {
 		return Result{
 			Success: false,
 			Output:  "",
 			Error:   "缺少必需参数：dest 是必需的，且 src 或 content 至少需要一个",
+			Change:  false,
+		}
+	}
+	if !filepath.IsAbs(dest) {
+		return Result{
+			Success: false,
+			Output:  "",
+			Error:   fmt.Sprintf("目标文件位置必须输入绝对路径，当前输入为:%s", dest),
 			Change:  false,
 		}
 	}
@@ -60,21 +60,29 @@ func (m *CopyModule) Run(hs HostSession, flags *Flags) Result {
 		return Result{
 			Success: false,
 			Output:  "",
-			Error:   "获取源文件/目录失败",
+			Error:   "获取源文件失败",
 			Change:  false,
 		}
 	}
-	f, err := os.Stat(srcAbs)
-	Logger.Sugar().Debugf("源文件名%s", f.Name())
+	srcf, err := os.Stat(srcAbs)
+	Logger.Sugar().Debugf("源文件名%s", srcf.Name())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Result{
 				Success: false,
 				Output:  "",
-				Error:   fmt.Sprintf("源文件/目录不存在:%s", srcAbs),
+				Error:   fmt.Sprintf("源文件不存在:%s", srcAbs),
 				Change:  false,
 			}
 		}
+	}
+	if srcf.IsDir() {
+		return Result{
+			Success: false,
+			Output:  "",
+			Error:   fmt.Sprintf("不支持目录复制: %s", srcAbs),
+			Change:  false,
+		} // 明确提示不支持目录
 	}
 	srcContent, err := os.ReadFile(srcAbs)
 	if err != nil {
@@ -95,18 +103,30 @@ func (m *CopyModule) Run(hs HostSession, flags *Flags) Result {
 		}
 	}
 	// 检查目标文件是否存在且内容相同（判断是否需要变更）
+
 	checkCmd := fmt.Sprintf(`
-if [ -f '%s' ]; then
-  destMd5=$(md5sum '%s' | awk '{print $1}')  # 提取MD5值（排除文件名）
+dest_path=%q  # 用户输入的目标路径（可能是文件或目录）
+src_filename=%q  # 本地 src 的文件名（用于拼接目录路径）
+dest_path=${dest_path%%/}
+# 判断 dest 是否为目录，如果是，则目标文件为 dest/src_filename
+if [ -d "$dest_path" ]; then
+  target_path="$dest_path/$src_filename"  # 目录 -> 拼接文件名
+else
+  target_path="$dest_path"  # 非目录 -> 直接使用 dest 作为目标文件
+fi
+
+# 后续逻辑基于 target_path 执行
+if [ -f "$target_path" ]; then
+  destMd5=$(md5sum "$target_path" | awk '{print $1}')
   if [ "$destMd5" = '%s' ]; then
-    echo "SAME"
+    echo -n "SAME"
   else
-    echo "DIFFER"
+    echo -n "DIFFER"
   fi
 else
-  echo "FILE_NOT_FOUND"
-fi 
-`, dest, dest, srcMd5)
+  echo -n "FILE_NOT_FOUND"
+fi
+`, dest, srcf.Name(), srcMd5)
 	var checkOut, checkErr bytes.Buffer
 	hs.Session.Stdout = &checkOut
 	hs.Session.Stderr = &checkErr
@@ -121,16 +141,30 @@ fi
 	}
 
 	destContent := checkOut.String()
+	destContentTrimmed := strings.TrimSpace(destContent)
+	Logger.Sugar().Debugf("远程文件状态返回", destContentTrimmed)
 	changed := false
 
 	// 判断是否需要变更（文件不存在或内容不同）
-	if destContent == "FILE_NOT_FOUND" || destContent == "DIFFER" {
+	if destContentTrimmed == "FILE_NOT_FOUND" || destContentTrimmed == "DIFFER" {
 		changed = true
-
+		permissionStr := fmt.Sprintf("%03o", srcf.Mode()&os.ModePerm)
 		// 创建临时文件并写入内容
 		tmpFile := fmt.Sprintf("/tmp/fastdp_copy_%d", time.Now().UnixNano())
 		// 给临时文件赋予与目标文件一致的权限
-		writeCmd := fmt.Sprintf(`cat > "%s" && chmod 644 "%s" && mv "%s" "%s"`, tmpFile, tmpFile, tmpFile, dest)
+		writeCmd := fmt.Sprintf(`
+dest_path=%q
+src_filename=%q
+dest_path=${dest_path%%/}
+if [ -d "$dest_path" ]; then
+  target_path="$dest_path/$src_filename"
+else
+  target_path="$dest_path"
+fi
+
+tmpFile=%q
+cat > "$tmpFile" && chmod %s "$tmpFile" && mv "$tmpFile" "$target_path"
+`, dest, srcf.Name(), tmpFile, permissionStr)
 
 		// 执行写入命令
 		session, err := hs.Client.NewSession()
@@ -186,13 +220,25 @@ fi
 				Change:  false,
 			}
 		}
+		return Result{
+			Success: true,
+			Output:  fmt.Sprintf("已成功复制 %s 到 %s（内容有更新）", src, dest),
+			Error:   "",
+			Change:  changed,
+		}
+	} else if destContentTrimmed == "SAME" {
+		return Result{
+			Success: true,
+			Output:  fmt.Sprintf("文件 %s 与远程 %s 内容一致，无需复制", src, dest),
+			Error:   "",
+			Change:  changed,
+		}
 	}
-
 	return Result{
-		Success: true,
-		Output:  fmt.Sprintf("Copied %s to %s", src, dest),
-		Error:   "",
-		Change:  changed,
+		Success: false,
+		Output:  "",
+		Error:   "未预期的远程文件状态: " + destContent,
+		Change:  false,
 	}
 }
 func init() {
