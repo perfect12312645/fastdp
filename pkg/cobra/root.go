@@ -36,7 +36,7 @@ var rootCmd = &cobra.Command{
   fastdp shell -a "uptime" all
 
   # 使用 copy 模块复制文件
-  fastdp copy -s local.txt -d /remote/path/ web
+  fastdp copy -s local.txt -d /remote/path/ db  192.168.1.106 
 
   # 测试主机连通性
   fastdp ping all`,
