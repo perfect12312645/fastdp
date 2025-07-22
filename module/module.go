@@ -1,7 +1,7 @@
 package module
 
 import (
-	. "fastdp/pkg/flags"
+	. "fastdp/pkg/cobra"
 	. "fastdp/utils"
 )
 
@@ -15,9 +15,6 @@ type Result struct {
 
 // Module 模块接口，所有模块必须实现这些方法
 type Module interface {
-	// SetParams 解析模块参数（如 "path=/tmp/file mode=0644"）
-	SetParams(params string) error
-
 	// Run 在目标主机上执行模块逻辑（通过 SSH 会话）
 	Run(hostSessions HostSession, flags *Flags) Result
 }

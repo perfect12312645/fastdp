@@ -2,7 +2,7 @@ package utils
 
 import (
 	"bufio"
-	. "fastdp/pkg/flags"
+	. "fastdp/pkg/cobra"
 	"fmt"
 	"os"
 	"regexp"
@@ -121,18 +121,23 @@ func HostParse(host string) ([]*HostGroup, error) {
 }
 
 // 获取将要执行的主机组
-func Inventory(Args []string, groups []*HostGroup) []*HostGroup {
+func Inventory(Args []string, groups []*HostGroup) ([]*HostGroup, []*Host) {
 	if len(Args) == 0 {
 		Errorf("ERROR: 请指定目标主机组")
 	}
 
 	// 优化 groupMap：键为组名，值为对应的 HostGroup 实例（便于快速查找）
 	groupMap := make(map[string]*HostGroup)
+	hostMap := make(map[string]*Host)
 	for _, g := range groups {
 		groupMap[g.Name] = g // 存储组名到 HostGroup 的映射
+		for _, host := range g.Hosts {
+			hostMap[host.Address] = host
+		}
 	}
 
 	var inventory []*HostGroup
+	var hosts []*Host
 	hasAll := false
 
 	for _, arg := range Args {
@@ -144,9 +149,12 @@ func Inventory(Args []string, groups []*HostGroup) []*HostGroup {
 		// 从 groupMap 中查找对应的 HostGroup
 		g, exists := groupMap[arg]
 		if !exists {
-			//Logger.Sugar().Warnf("忽略未知的主机组: %s", arg)
-			Errorf("忽略未知的主机组: %s", arg)
-			continue
+			host, exists := hostMap[arg]
+			if !exists {
+				Errorf("忽略未知的主机组或主机: %s", arg)
+				continue
+			}
+			hosts = append(hosts, host)
 		}
 
 		// 添加找到的 HostGroup 到结果中
@@ -155,8 +163,8 @@ func Inventory(Args []string, groups []*HostGroup) []*HostGroup {
 
 	// 如果指定了 "all"，直接返回所有主机组
 	if hasAll {
-		return groups
+		return groups, nil
 	}
 
-	return inventory
+	return inventory, hosts
 }

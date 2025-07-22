@@ -1,11 +1,13 @@
 package utils
 
 import (
-	. "fastdp/pkg/flags"
+	. "fastdp/pkg/cobra"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 )
 
 // 使用结构体保存每个主机的客户端和会话
@@ -15,53 +17,96 @@ type HostSession struct {
 	Addr    string       // 主机地址（如 "192.168.1.1:22"）
 }
 
-func SshConnect(groups []*HostGroup) []HostSession {
-	var hostSessions []HostSession
-	for _, group := range groups {
-		for _, host := range group.Hosts {
-			// 动态选择认证方式
+func SshConnect(groups []*HostGroup, hosts []*Host) []HostSession {
+	var allHosts []*Host
+	if len(groups) > 0 {
+		for _, group := range groups {
+			if group == nil {
+				continue // 跳过 nil 元素，避免访问 group.Hosts
+			}
+			allHosts = append(allHosts, group.Hosts...)
+		}
+	}
+	if len(hosts) > 0 {
+		allHosts = append(allHosts, hosts...)
+	}
+	var (
+		wg           sync.WaitGroup
+		mu           sync.Mutex
+		hostSessions []HostSession
+	)
+
+	// 创建有缓冲的channel来控制最大并发数
+	maxConcurrency := GlobalFlags.Concurrency
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	for _, host := range allHosts {
+		wg.Add(1)
+		go func(h *Host) {
+			defer wg.Done()
+
+			// 控制并发数量
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// 认证方式选择
 			var authMethods []ssh.AuthMethod
-			pwd := host.Params["password"]
+			pwd := h.Params["password"]
 			if pwd != "" {
-				// 有密码时使用密码认证
 				authMethods = []ssh.AuthMethod{ssh.Password(pwd)}
 			} else {
-				// 无密码时使用公钥认证
 				keyAuth, err := publicKeyAuth()
 				if err != nil {
-					Errorf("主机 %s 公钥认证初始化失败: %v", host, err)
-					continue
+					mu.Lock()
+					Errorf("主机 %s 公钥认证初始化失败: %v", h, err)
+					mu.Unlock()
+					return
 				}
 				authMethods = []ssh.AuthMethod{keyAuth}
 			}
-			config := &ssh.ClientConfig{
-				User:            host.Params["user"],
-				Auth:            authMethods,
-				HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 注意：生产环境不要使用此选项
+
+			port := h.Params["port"]
+			if port == "" {
+				port = "22"
 			}
 
-			client, err := ssh.Dial("tcp", host.Address+":"+host.Params["port"], config)
+			config := &ssh.ClientConfig{
+				User:            h.Params["user"],
+				Auth:            authMethods,
+				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+				Timeout:         5 * time.Second, // 添加连接超时
+			}
+
+			client, err := ssh.Dial("tcp", h.Address+":"+port, config)
 			if err != nil {
-				Errorf("连接 %s 失败: %v", host.Address, err)
-				continue // 跳过当前主机，继续处理其他主机
+				mu.Lock()
+				Errorf("连接 %s 失败: %v", h.Address, err)
+				mu.Unlock()
+				return
 			}
 
 			session, err := client.NewSession()
 			if err != nil {
-				Errorf("为 %s 创建会话失败: %v", host.Address, err)
-				client.Close() // 关闭客户端连接
-				continue
+				mu.Lock()
+				Errorf("为 %s 创建会话失败: %v", h.Address, err)
+				mu.Unlock()
+				client.Close()
+				return
 			}
 
+			// 将结果添加到切片（需要加锁）
+			mu.Lock()
 			hostSessions = append(hostSessions, HostSession{
 				Client:  client,
 				Session: session,
-				Addr:    host.Address,
+				Addr:    h.Address,
 			})
-		}
+			mu.Unlock()
+		}(host) // 将当前host作为参数传入
 	}
-	return hostSessions
 
+	wg.Wait() // 等待所有goroutine完成
+	return hostSessions
 }
 
 // publicKeyAuth 生成基于默认私钥文件的认证方法

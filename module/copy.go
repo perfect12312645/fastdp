@@ -2,7 +2,7 @@ package module
 
 import (
 	"bytes"
-	. "fastdp/pkg/flags"
+	. "fastdp/pkg/cobra"
 	. "fastdp/utils"
 	"fmt"
 	"os"
@@ -12,7 +12,6 @@ import (
 )
 
 type CopyModule struct {
-	command string // 要执行的命令（从参数解析）
 }
 
 // NewShellModule 创建 Shell 模块实例
@@ -20,31 +19,10 @@ func NewCopyModule() Module {
 	return &CopyModule{}
 }
 
-// SetParams 解析参数（格式：直接是命令字符串，如 "ls -l /tmp"）
-func (m *CopyModule) SetParams(params string) error {
-	m.command = params // 简单直接，参数就是命令本身
-	return nil
-}
 func (m *CopyModule) Run(hs HostSession, flags *Flags) Result {
-	// 解析参数：src=source_path dest=destination_path content="hello world"
-	params := make(map[string]string)
-	for _, part := range strings.Fields(*flags.Parameter) {
-		if kv := strings.SplitN(part, "=", 2); len(kv) == 2 {
-			params[kv[0]] = kv[1]
-		}
-	}
+	src := flags.Parameter["source"]
+	dest := flags.Parameter["dest"]
 
-	src, srcExists := params["src"]
-	dest, destExists := params["dest"]
-	//content, contentExists := params["content"]
-	if !destExists || !srcExists {
-		return Result{
-			Success: false,
-			Output:  "",
-			Error:   "缺少必需参数：dest 是必需的，且 src 或 content 至少需要一个",
-			Change:  false,
-		}
-	}
 	if !filepath.IsAbs(dest) {
 		return Result{
 			Success: false,
@@ -65,17 +43,26 @@ func (m *CopyModule) Run(hs HostSession, flags *Flags) Result {
 		}
 	}
 	srcf, err := os.Stat(srcAbs)
-	Logger.Sugar().Debugf("源文件名%s", srcf.Name())
+
 	if err != nil {
+		// 处理所有可能的错误（文件不存在、权限不足等）
 		if os.IsNotExist(err) {
 			return Result{
 				Success: false,
 				Output:  "",
-				Error:   fmt.Sprintf("源文件不存在:%s", srcAbs),
+				Error:   fmt.Sprintf("源文件不存在: %s", srcAbs),
 				Change:  false,
 			}
 		}
+		// 其他错误（如权限不足）
+		return Result{
+			Success: false,
+			Output:  "",
+			Error:   fmt.Sprintf("获取源文件信息失败: %s", err.Error()),
+			Change:  false,
+		}
 	}
+	Logger.Sugar().Debugf("源文件名%s", srcf.Name())
 	if srcf.IsDir() {
 		return Result{
 			Success: false,

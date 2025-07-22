@@ -1,0 +1,21 @@
+配置文件:
+  默认从当前目录加载 config.toml
+  Host_inventory = "host"
+
+ 主机组配置:
+   默认从当前目录加载 host 文件，格式为:
+     [组名]
+     主机地址 [参数=值 ...]
+ 
+   支持参数:
+     user: 登录用户 (默认: root)
+     port: SSH端口 (默认: 22)
+     password: 登录密码 (不指定则使用SSH密钥)
+
+   示例配置:
+     [web]
+     192.168.1.100 user=admin port=2222
+     192.168.1.101 password=secure@123
+
+     [db]
+     192.168.2.50 user=dbadmin

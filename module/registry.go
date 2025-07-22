@@ -1,7 +1,8 @@
 package module
 
 import (
-	"fastdp/pkg/flags"
+	"fastdp/pkg/cobra"
+	"fmt"
 	"sync"
 )
 
@@ -24,7 +25,9 @@ func GetModule(name string) (Module, error) {
 	defer mu.RUnlock()
 	factory, ok := registry[name]
 	if !ok {
-		flags.Errorf("未知模块: %s", name)
+		err := fmt.Errorf("未知模块: %s", name)
+		cobra.Errorf(err.Error()) // 输出错误
+		return nil, err           // 返回错误，不再执行 factory()
 	}
 	return factory(), nil // 调用构造函数创建实例
 }

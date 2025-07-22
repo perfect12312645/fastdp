@@ -2,13 +2,12 @@ package module
 
 import (
 	"bytes"
-	. "fastdp/pkg/flags"
+	. "fastdp/pkg/cobra"
 	. "fastdp/utils"
 	"strings"
 )
 
 type PingModule struct {
-	command string // 要执行的命令（从参数解析）
 }
 
 // NewShellModule 创建 Shell 模块实例
@@ -16,11 +15,6 @@ func NewPingModule() Module {
 	return &PingModule{}
 }
 
-// SetParams 解析参数（格式：直接是命令字符串，如 "ls -l /tmp"）
-func (m *PingModule) SetParams(params string) error {
-	m.command = params // 简单直接，参数就是命令本身
-	return nil
-}
 func (m *PingModule) Run(hs HostSession, flags *Flags) Result {
 	// 存储命令输出的缓冲区
 	var stdout, stderr bytes.Buffer
