@@ -1,0 +1,9 @@
+# 示例：
+# [all]
+# 192.168.1.106 user=root port=22 password=123456
+# 192.168.1.107 user=root port=22 password=123456
+# 192.168.1.108
+# 192.168.1.109 user=root port=22 password=123456
+# 不指定user默认为root，port默认为22，password不指定需要设置免密
+# [123]
+# 192.168.1.109
