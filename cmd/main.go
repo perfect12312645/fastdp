@@ -4,6 +4,7 @@ import (
 	"fastdp/module"
 	"fastdp/pkg/config"
 	"os"
+	"time"
 
 	. "fastdp/pkg/cobra"
 	. "fastdp/utils"
@@ -86,6 +87,16 @@ func main() {
 	if err != nil {
 		Errorf("获取模块失败: %v", err)
 		os.Exit(1)
+	}
+	if GlobalFlags.Module == "copy" {
+		// 转换为Debug日志，使用%v格式化时间对象
+		Logger.Sugar().Debugf("copy模块，开始计算源文件md5: %v", time.Now())
+		GlobalFlags, err = module.GetSource(GlobalFlags)
+		if err != nil {
+			Logger.Sugar().Errorf("copy模块，获取源文件信息失败: %v", err)
+			os.Exit(1)
+		}
+		Logger.Sugar().Debugf("copy模块，计算源文件md5结束: %v", time.Now())
 	}
 	execute(hostSessions, GlobalFlags, mod)
 }
