@@ -17,7 +17,6 @@ type Flags struct {
 	HostInventory []string          // 主机组或者主机
 	Debug         bool              // 调试模式
 	Concurrency   int               // 并发数量
-	SrcContent    []byte
 }
 
 var (

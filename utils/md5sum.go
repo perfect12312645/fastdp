@@ -7,6 +7,7 @@ import (
 	"os"
 )
 
+
 // 计算文件的 MD5 值
 func FileMD5(path string) (string, error) {
 	f, err := os.Open(path)
