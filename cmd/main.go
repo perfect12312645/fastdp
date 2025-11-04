@@ -4,6 +4,7 @@ import (
 	"fastdp/module"
 	"fastdp/pkg/config"
 	"os"
+	"sort"
 	"time"
 
 	. "fastdp/pkg/cobra"
@@ -42,8 +43,17 @@ func execute(hostSessions []HostSession, flags *Flags, mod module.Module) {
 	}
 
 	wg.Wait() // 等待所有 goroutine 完成
+	// 将字典键转换为切片并按照IP地址排序
+	addrs := make([]string, 0, len(results))
+	for addr := range results {
+		addrs = append(addrs, addr)
+	}
+
+	// 按照IP地址排序（字符串排序）
+	sort.Strings(addrs)
 	// 输出
-	for addr, result := range results {
+	for _, addr := range addrs {
+		result := results[addr]
 		if result.Success {
 			if result.Change {
 				Changedf("host:%s 执行成功 output:\n%s", addr, result.Output)
