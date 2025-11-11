@@ -168,3 +168,34 @@ func Inventory(Args []string, groups []*HostGroup) ([]*HostGroup, []*Host) {
 
 	return inventory, hosts
 }
+func Filter(groups []*HostGroup, hosts []*Host) []*Host {
+	var allHosts []*Host
+	if len(groups) > 0 {
+		for _, group := range groups {
+			if group == nil {
+				continue // 跳过 nil 元素，避免访问 group.Hosts
+			}
+			allHosts = append(allHosts, group.Hosts...)
+		}
+	}
+	if len(hosts) > 0 {
+		allHosts = append(allHosts, hosts...)
+	}
+	// 对最终的主机列表进行去重
+	allHosts = deduplicateHosts(allHosts)
+	return allHosts
+}
+
+func deduplicateHosts(hosts []*Host) []*Host {
+	seen := make(map[string]bool)
+	var result []*Host
+
+	for _, host := range hosts {
+		if host != nil && !seen[host.Address] {
+			seen[host.Address] = true
+			result = append(result, host)
+		}
+	}
+
+	return result
+}

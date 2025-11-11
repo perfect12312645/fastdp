@@ -17,19 +17,7 @@ type HostSession struct {
 	Addr    string       // 主机地址（如 "192.168.1.1:22"）
 }
 
-func SshConnect(groups []*HostGroup, hosts []*Host) []HostSession {
-	var allHosts []*Host
-	if len(groups) > 0 {
-		for _, group := range groups {
-			if group == nil {
-				continue // 跳过 nil 元素，避免访问 group.Hosts
-			}
-			allHosts = append(allHosts, group.Hosts...)
-		}
-	}
-	if len(hosts) > 0 {
-		allHosts = append(allHosts, hosts...)
-	}
+func SshConnect(allHosts []*Host) []HostSession {
 	var (
 		wg           sync.WaitGroup
 		mu           sync.Mutex

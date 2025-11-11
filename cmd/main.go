@@ -88,11 +88,12 @@ func main() {
 	}
 	// 获取将要执行的主机组
 	inventory, hosts := Inventory(GlobalFlags.HostInventory, groups)
+	execHosts := Filter(inventory, hosts)
 	Logger.Debug("message", zap.Any("将要执行的主机组", inventory))
-	Logger.Debug("message", zap.Any("将要执行的主机", hosts))
+	Logger.Debug("message", zap.Any("将要执行的所有主机", execHosts))
 	Logger.Debug("message", zap.String("将要执行的模块", GlobalFlags.Module))
 	Logger.Debug("message", zap.Any("将要执行的参数", GlobalFlags.Parameter))
-	hostSessions := SshConnect(inventory, hosts)
+	hostSessions := SshConnect(execHosts)
 	mod, err := module.GetModule(GlobalFlags.Module)
 	if err != nil {
 		Errorf("获取模块失败: %v", err)

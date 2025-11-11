@@ -1,2 +1,2 @@
-#Host_inventory = "/etc/fastdp/host"
-Host_inventory = "host"
+Host_inventory = "/etc/fastdp/host"
+#Host_inventory = "host"
