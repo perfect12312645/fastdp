@@ -27,6 +27,7 @@
 ### 无冗余设计：
 - 摒弃复杂的兼容性逻辑和冗余配置解析
 - 专注核心运维场景，让每一次执行都「轻装上阵」
+- 上手成本低，二进制文件大小只有10MB左右，无任何依赖，无需处理多版本 Python 适配
 
 ## 对运维的意义
 
@@ -39,36 +40,29 @@
 
 
 ## 安装
-### 快速开始
+### quick start
 1. 下载发行包
-   使用 wget 或 curl 下载 amd64 架构的发行包：
 ```bash
-# 使用 wget
-# amd64版本
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/fastdp-v1/fastdp-v1-linux-amd64.tar.gz
+# amd64 版本
+wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v5/fastdp-v5-linux-amd64.tar.gz
 
-# arm64版本
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/fastdp-v1/fastdp-v1-linux-arm64.tar.gz
+# arm64 版本
+wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v5/fastdp-v5-linux-arm64.tar.gz
 ```
 2. 解压文件
    解压下载的压缩包，获取二进制文件和配置模板：
 ```bash
 # 解压到当前目录,以amd64版本为例
-tar -zxvf fastdp-v1-linux-amd64.tar.gz
+tar -zxvf fastdp-v5-linux-amd64.tar.gz
 # 解压后会生成 fastdp 目录，包含二进制文件和配置示例
 cd fastdp
-```
-3. 安装方式
-```bash
-# 复制二进制文件到 /usr/local/bin（无需额外配置 PATH）
+# 复制二进制文件到系统 PATH
 cp fastdp /usr/local/bin/
- 
-# 复制配置文件模板到系统配置目录
+
+# 配置文件初始化
 mkdir -p /etc/fastdp
 cp config.toml host /etc/fastdp/
- 
-# 编辑/etc/fastdp/host文件，添加主机信息,可按照示例添加
-vim /etc/fastdp/host 
+vim /etc/fastdp/host  # 编辑主机组配置
 ```
 ### 从源码编译
 ```bash
@@ -92,14 +86,22 @@ echo 'Host_inventory = "/etc/fastdp/host"' > /etc/fastdp/config.toml
 # 查看帮助
 fastdp --help
 
-# 在指定主机组执行 shell 命令（显式指定 shell 模块）
-fastdp shell -a "ls -l /tmp" web
+# 在 web 组执行 uptime 命令
+fastdp shell -a "uptime" web
 
-# 使用 copy 模块复制文件到远程主机
-fastdp copy -s local.txt -d /remote/path/ web
+# 多主机组/IP 混合执行
+fastdp shell -a "lsblk" master node 192.168.10.100
 
-# 测试主机连通性,支持多个组及单个ip
-fastdp ping db web 192.168.1.106
+# 复制本地文件到 db 组（自动同步权限+MD5校验）
+fastdp copy -s ./config.ini -d /etc/app/config.ini db
+
+# 检测 all 组主机 SSH 存活状态
+fastdp ping all
+
+# 进阶用法示例
+# 汇总各主机环境变量（注意单引号转义规则）
+fastdp shell -a 'echo $(hostname -I|awk '\''{print $1}'\'') $(hostname)' all \
+| grep -v 'output:'
 
 # 开启调试模式（显示详细日志）
 fastdp -v shell -a "df -h" web
