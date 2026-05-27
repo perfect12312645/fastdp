@@ -2,7 +2,7 @@ package utils
 
 import (
 	"bufio"
-	. "fastdp/pkg/cobra"
+	. "fastdp/pkg/log"
 	"fmt"
 	"os"
 	"regexp"

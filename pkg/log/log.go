@@ -6,6 +6,8 @@ import (
 	"os"
 )
 
+var Logger *zap.Logger
+
 func getEncoder() zapcore.Encoder {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -16,6 +18,7 @@ func getEncoder() zapcore.Encoder {
 func getLogWriter() zapcore.WriteSyncer {
 	return zapcore.AddSync(os.Stdout)
 }
+
 func InitLogger(debug bool) *zap.Logger {
 	consoleWs := getLogWriter()
 	encoder := getEncoder()

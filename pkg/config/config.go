@@ -1,27 +1,43 @@
 package config
 
 import (
-	"fastdp/pkg/cobra"
 	"github.com/spf13/viper"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type ConfigList struct {
-	ConfigAbsPath  string
-	Host_inventory string
+	ConfigAbsPath      string
+	HostInventory      string // 驼峰
+	Concurrency        int
+	LogLevel           string // 驼峰
+	DefaultSSHPort     int    // 驼峰
+	DefaultSSHUser     string // 驼峰
+	DefaultSSHPassword string // 驼峰
+	DefaultSSHTimeout  int    // 驼峰
+	DefaultExecTimeout int    // 驼峰
 }
 
-// 查找配置文件路径（按优先级）
+var GlobalConfig *ConfigList
+
+type Flags struct {
+	Parameter     map[string]string
+	HostInventory []string
+	Debug         bool
+	Concurrency   int
+}
+
+var GlobalFlags = &Flags{
+	Parameter: make(map[string]string),
+}
+
+// 查找配置文件
 func FindConfigFile() string {
-	// 1. 系统级路径
 	systemPath := "/etc/fastdp/config.toml"
 	if _, err := os.Stat(systemPath); err == nil {
 		return systemPath
 	}
 
-	// 2. 用户级路径（~/.fastdp/config.toml）
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		userPath := filepath.Join(homeDir, ".fastdp", "config.toml")
@@ -30,34 +46,42 @@ func FindConfigFile() string {
 		}
 	}
 
-	// 所有路径都不存在（可返回空或默认配置）
-	return "" // 或返回默认配置路径，视需求而定
+	return ""
 }
-func ParseConfig(configFile string) ConfigList {
-	// 确保配置路径有效
+
+func ParseConfig(configFile string) (*ConfigList, error) {
 	absPath, err := filepath.Abs(configFile)
 	if err != nil {
-		cobra.Errorf("获取配置文件绝对路径失败: %w", err)
-		//os.Exit(6)
+		return nil, err
 	}
 
-	// 提取目录和文件名
 	dir := filepath.Dir(absPath)
-
 	fileName := filepath.Base(absPath)
-	fileExt := strings.Split(filepath.Ext(fileName), ".")[1]
+	fileExt := ""
+	if ext := filepath.Ext(fileName); len(ext) > 1 {
+		fileExt = ext[1:]
+	}
 
 	viper.SetConfigName(fileName)
 	viper.SetConfigType(fileExt)
 	viper.AddConfigPath(dir)
+
 	if err := viper.ReadInConfig(); err != nil {
-		cobra.Errorf("读取配置失败: %v", err)
-		os.Exit(5)
+		return nil, err
 	}
 
-	return ConfigList{
-		ConfigAbsPath:  absPath,
-		Host_inventory: viper.GetString("Host_inventory"),
+	cfg := &ConfigList{
+		ConfigAbsPath:      absPath,
+		HostInventory:      viper.GetString("host_inventory"),
+		Concurrency:        viper.GetInt("concurrency"),
+		LogLevel:           viper.GetString("log_level"),
+		DefaultSSHPort:     viper.GetInt("default_ssh_port"),
+		DefaultSSHUser:     viper.GetString("default_ssh_user"),
+		DefaultSSHPassword: viper.GetString("default_ssh_password"),
+		DefaultSSHTimeout:  viper.GetInt("default_ssh_timeout"),
+		DefaultExecTimeout: viper.GetInt("default_exec_timeout"),
 	}
 
+	GlobalConfig = cfg
+	return cfg, nil
 }

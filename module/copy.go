@@ -2,7 +2,8 @@ package module
 
 import (
 	"bytes"
-	. "fastdp/pkg/cobra"
+	"fastdp/pkg/config"
+	. "fastdp/pkg/log"
 	. "fastdp/utils"
 	"fmt"
 	"io"
@@ -51,7 +52,7 @@ func NewCopyModule() Module {
 	return &CopyModule{}
 }
 
-func GetSource(flags *Flags) (*Flags, error) {
+func GetSource(flags *config.Flags) (*config.Flags, error) {
 	// （原有逻辑不变）
 	src := flags.Parameter["source"]
 	dest := flags.Parameter["dest"]
@@ -88,7 +89,7 @@ func GetSource(flags *Flags) (*Flags, error) {
 	return flags, nil
 }
 
-func (m *CopyModule) Run(hs HostSession, flags *Flags) Result {
+func (m *CopyModule) Run(hs HostSession, flags *config.Flags) Result {
 	srcAbs := flags.Parameter["srcAbsPath"]
 	dest := flags.Parameter["dest"]
 	srcMd5 := flags.Parameter["md5"]

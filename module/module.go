@@ -1,7 +1,7 @@
 package module
 
 import (
-	. "fastdp/pkg/cobra"
+	"fastdp/pkg/config"
 	. "fastdp/utils"
 )
 
@@ -16,5 +16,5 @@ type Result struct {
 // Module 模块接口，所有模块必须实现这些方法
 type Module interface {
 	// Run 在目标主机上执行模块逻辑（通过 SSH 会话）
-	Run(hostSessions HostSession, flags *Flags) Result
+	Run(hostSessions HostSession, flags *config.Flags) Result
 }

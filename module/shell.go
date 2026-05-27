@@ -2,7 +2,7 @@ package module
 
 import (
 	"bytes"
-	. "fastdp/pkg/cobra"
+	"fastdp/pkg/config"
 	. "fastdp/utils"
 )
 
@@ -15,11 +15,12 @@ func NewShellModule() Module {
 	return &ShellModule{}
 }
 
-func (m *ShellModule) Run(hs HostSession, flags *Flags) Result {
+func (m *ShellModule) Run(hs HostSession, flags *config.Flags) Result {
 	// 存储命令输出的缓冲区
 	var stdout, stderr bytes.Buffer
 	hs.Session.Stdout = &stdout // 将命令的标准输出重定向到缓冲区
 	hs.Session.Stderr = &stderr // 将命令的标准错误输出重定向到缓冲区
+
 	// 执行命令（*flags.Parameter是命令内容）
 	if err := hs.Session.Run(flags.Parameter["args"]); err != nil {
 		return Result{

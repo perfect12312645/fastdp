@@ -1,2 +1,20 @@
-Host_inventory = "/etc/fastdp/host"
-#Host_inventory = "host"
+# 主机清单路径
+host_inventory = "/etc/fastdp/host"
+
+# 默认并发数
+concurrency = 15
+
+# 默认 SSH 端口
+default_ssh_port = 22
+
+# 默认 SSH 用户名
+default_ssh_user = "root"
+
+# 默认 SSH 连接超时（秒），不设置或者值为0代表永不超时
+default_ssh_timeout = 5
+
+# 日志级别：debug/info
+log_level = "info"
+
+# 全局默认密码（所有机器统一密码的情况）
+default_ssh_password = ""

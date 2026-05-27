@@ -1,11 +1,12 @@
 package utils
 
 import (
-	. "fastdp/pkg/cobra"
+	"fastdp/pkg/config"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -24,48 +25,58 @@ func SshConnect(allHosts []*Host) []HostSession {
 		hostSessions []HostSession
 	)
 
-	// 创建有缓冲的channel来控制最大并发数
-	maxConcurrency := GlobalFlags.Concurrency
-	semaphore := make(chan struct{}, maxConcurrency)
-
 	for _, host := range allHosts {
 		wg.Add(1)
 		go func(h *Host) {
 			defer wg.Done()
+			// 1. 用户名
+			user := h.Params["user"]
+			if user == "" {
+				user = config.GlobalConfig.DefaultSSHUser
+			}
+			if user == "" {
+				user = "root" // 最终兜底
+			}
 
-			// 控制并发数量
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
+			// 2. 密码
+			password := h.Params["password"]
+			if password == "" {
+				password = config.GlobalConfig.DefaultSSHPassword
+			}
+			// 密码无兜底，为空就是空
+
+			// 3. 端口
+			port := h.Params["port"]
+			if port == "" {
+				port = strconv.Itoa(config.GlobalConfig.DefaultSSHPort)
+			}
+			if port == "" {
+				port = "22" // 最终兜底
+			}
 
 			// 认证方式选择
 			var authMethods []ssh.AuthMethod
-			pwd := h.Params["password"]
-			if pwd != "" {
-				authMethods = []ssh.AuthMethod{ssh.Password(pwd)}
+
+			if password != "" {
+				authMethods = []ssh.AuthMethod{ssh.Password(password)}
 			} else {
 				keyAuth, err := publicKeyAuth()
 				if err != nil {
 					mu.Lock()
-					Errorf("主机 %s 公钥认证初始化失败: %v", h, err)
+					Errorf("主机 %s 公钥认证失败: %v", h.Address, err)
 					mu.Unlock()
 					return
 				}
 				authMethods = []ssh.AuthMethod{keyAuth}
 			}
-
-			port := h.Params["port"]
-			if port == "" {
-				port = "22"
-			}
-
-			config := &ssh.ClientConfig{
-				User:            h.Params["user"],
+			sshConfig := &ssh.ClientConfig{
+				User:            user,
 				Auth:            authMethods,
 				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-				Timeout:         5 * time.Second, // 添加连接超时
+				Timeout:         time.Duration(config.GlobalConfig.DefaultSSHTimeout) * time.Second,
 			}
 
-			client, err := ssh.Dial("tcp", h.Address+":"+port, config)
+			client, err := ssh.Dial("tcp", h.Address+":"+port, sshConfig)
 			if err != nil {
 				mu.Lock()
 				Errorf("连接 %s 失败: %v", h.Address, err)
@@ -99,20 +110,38 @@ func SshConnect(allHosts []*Host) []HostSession {
 
 // publicKeyAuth 生成基于默认私钥文件的认证方法
 func publicKeyAuth() (ssh.AuthMethod, error) {
-	// 获取用户主目录下的私钥文件路径（默认 ~/.ssh/id_rsa）
-	keyPath := filepath.Join(os.Getenv("HOME"), ".ssh", "id_rsa")
-
-	// 读取私钥文件
-	key, err := os.ReadFile(keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("读取私钥文件失败: %v", err)
+	// 定义常见私钥路径（按优先级排序）
+	privateKeys := []string{
+		"id_rsa",
+		"id_ed25519",
+		"id_ecdsa",
+		"id_dsa",
 	}
+	// 遍历尝试
+	for _, keyName := range privateKeys {
+		// 获取用户主目录下的私钥文件路径（默认 ~/.ssh/id_rsa）
+		keyPath := filepath.Join(os.Getenv("HOME"), ".ssh", keyName)
+		// 检查文件是否存在
+		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+			continue // 不存在就跳过
+		}
+		// 读取私钥文件
+		key, err := os.ReadFile(keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取私钥文件失败: %v", err)
+		}
 
-	// 解析私钥
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("解析私钥失败: %v", err)
+		// 解析私钥
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("解析私钥失败: %v", err)
+		}
+
+		// 成功解析 → 直接返回
+		return ssh.PublicKeys(signer), nil
+
 	}
+	// 所有私钥都失败
+	return nil, fmt.Errorf("未找到任何可用的SSH私钥")
 
-	return ssh.PublicKeys(signer), nil
 }

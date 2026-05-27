@@ -1,8 +1,12 @@
 package cobra
 
 import (
+	"fastdp/module"
+	"fastdp/pkg/config"
+	. "fastdp/utils"
 	"fmt"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 var shellCmd = &cobra.Command{
@@ -18,14 +22,38 @@ var shellCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		GlobalFlags.Module = "shell"
 		// 处理主机组参数（如 web/all）
-		GlobalFlags.HostInventory = args
+		config.GlobalFlags.HostInventory = args
 		aValue, _ := cmd.Flags().GetString("args")
-		GlobalFlags.Parameter["args"] = aValue
+		config.GlobalFlags.Parameter["args"] = aValue
+		execHosts, err := GetInfo()
+		if err != nil {
+			Errorf("获取配置信息失败: %v", err)
+			os.Exit(-2)
+		}
+		hostSessions := SshConnect(execHosts)
+		mod, err := module.GetModule("shell")
+		if err != nil {
+			Errorf("获取模块失败: %v", err)
+			os.Exit(-3)
+		}
+		execute(hostSessions, config.GlobalFlags, mod)
 	},
-	Example: `  fastdp shell -a "df -h" web
-  fastdp shell -a "service nginx restart" db`,
+	Example: `
+  # 基础用法：单组执行命令
+  fastdp shell -a "df -h" web
+
+  # 混合指定：组 + IP 同时执行
+  fastdp shell -a "free -h" master node 192.168.10.100
+
+  # 引号使用：命令内部无冲突可自由使用
+  fastdp shell -a 'ls -l /root' all
+  fastdp shell -a "echo hello world" all
+
+  # 高阶用法：批量输出 IP + 主机名（过滤无用输出）
+  fastdp shell -a 'echo $(hostname -I|awk '\''{print $1}'\'') $(hostname)' all | grep -v 'output:'
+`,
+
 	Args: cobra.MinimumNArgs(1),
 }
 
