@@ -73,6 +73,7 @@ var checkCmd = &cobra.Command{
 	},
 	Example: `
   # 对所有主机执行环境检查（默认表格输出）
+  # 注：巡检脚本固定路径为 /etc/fastdp/fastdp-check.sh，可自行编辑自定义输出内容
   fastdp check all
 
   # 竖向格式化输出（类似 mysql \\G）

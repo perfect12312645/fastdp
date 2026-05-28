@@ -27,14 +27,17 @@ var rootCmd = &cobra.Command{
   # 同时指定多个主机组 + IP（非常灵活）
   fastdp shell -a "lsblk" master node 192.168.10.100
 
-  # 测试所有主机连通性
-  fastdp ping all
+  # 批量检查主机信息
+  fastdp check all
 
   # 本地文件复制到远程主机
   fastdp copy -s config.toml -d /tmp/ all
 
-  # 全局 -i 指定主机清单文件
-  fastdp -i ./host shell -a "hostname" all
+  # 批量拉取文件
+  fastdp fetch -r "/remote/logs/*" all
+
+  # 批量远程脚本
+  fastdp script -f /tmp/check.sh all
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 
