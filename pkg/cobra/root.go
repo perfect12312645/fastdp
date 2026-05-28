@@ -6,10 +6,13 @@ import (
 	. "fastdp/pkg/log"
 	. "fastdp/utils"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -90,7 +93,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("inventory", "i", "", "指定主机清单文件 (优先于配置文件)")
 
 	// 添加子命令
-	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd)
+	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd)
 
 }
 
@@ -173,6 +176,12 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module)
 
 	// 按照IP地址排序（字符串排序）
 	sort.Strings(addrs)
+
+	if flags.Parameter["script_file"] == "/etc/fastdp/fastdp-check.sh" {
+		PolishOutput(addrs, results)
+		return
+	}
+
 	// 输出
 	for _, addr := range addrs {
 		result := results[addr]
@@ -187,4 +196,210 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module)
 				addr, result.Output, result.Error)
 		}
 	}
+}
+
+func PolishOutput(addrs []string, results map[string]module.Result) {
+	// 判断是否启用竖向模式
+	isVertical := config.GlobalFlags.Parameter["vertical"] == "true"
+	outputFormat := config.GlobalFlags.Parameter["format"]
+
+	// 预定义所有要展示的字段（顺序固定）
+	standardFields := []struct {
+		key  string
+		name string
+	}{
+		{"hostname", "主机名"},
+		{"virt", "虚拟化"},
+		{"os", "系统版本"},
+		{"kernel", "内核"},
+		{"cpu_cores", "CPU核心"},
+		{"cpu_model", "CPU型号"},
+		{"arch", "架构"},
+		{"mem", "内存"},
+		{"net", "网卡"},
+		{"gateway", "网关"},
+		{"disk", "磁盘"},
+		{"firewall", "防火墙"},
+		{"selinux", "SELinux"},
+		{"swap", "Swap"},
+		{"timezone", "时区"},
+		{"sys_time", "系统时间"},
+		{"hw_time", "硬件时间"},
+		{"gpu", "GPU"},
+	}
+	// 标准字段 key 集合（用于快速判断）
+	standardKeyMap := make(map[string]bool)
+	for _, f := range standardFields {
+		standardKeyMap[f.key] = true
+	}
+	hostDataCache := make(map[string]map[string]string) // IP => 解析后的KV
+	customFieldSet := make(map[string]bool)             // 所有自定义字段
+
+	for _, ip := range addrs {
+		res := results[ip]
+		if !res.Success {
+			continue
+		}
+		data := parseCheckOutput(res.Output)
+		hostDataCache[ip] = data // 缓存
+
+		// 收集自定义字段
+		for k := range data {
+			if !standardKeyMap[k] {
+				customFieldSet[k] = true
+			}
+		}
+	}
+
+	// 排序自定义字段（保证表格列对齐，必须要）
+	var sortedCustomFields []string
+	for k := range customFieldSet {
+		sortedCustomFields = append(sortedCustomFields, k)
+	}
+	sort.Strings(sortedCustomFields)
+
+	// --------------------------
+	// 竖向模式（-g 参数）
+	// --------------------------
+	if isVertical {
+		for _, ip := range addrs {
+			res := results[ip]
+			if !res.Success {
+				fmt.Printf("\n===== %s =====\n执行失败\n", ip)
+				continue
+			}
+
+			data := hostDataCache[ip]
+			fmt.Printf("\n\033[1;34m===== %s =====\033[0m\n", ip)
+
+			// 1. 输出标准字段
+			for _, f := range standardFields {
+				val := data[f.key]
+				if val == "" {
+					val = "-"
+				}
+				fmt.Printf("%-10s: %s\n", f.name, val)
+			}
+			//  2. 收集并输出【自定义字段】
+			var customFields []string
+			for k := range data {
+				if !standardKeyMap[k] {
+					customFields = append(customFields, k)
+				}
+			}
+			sort.Strings(customFields)
+
+			if len(customFields) > 0 {
+				for _, k := range customFields {
+					val := data[k]
+					if val == "" {
+						val = "-"
+					}
+					fmt.Printf("%-10s: %s\n", k, val)
+				}
+			}
+		}
+		return
+	}
+
+	// --------------------------
+	// 默认横向表格（美观）
+	// --------------------------
+	t := table.NewWriter()
+
+	// 表头
+	header := table.Row{"主机IP"}
+	for _, f := range standardFields {
+		header = append(header, f.name)
+	}
+	for _, k := range sortedCustomFields {
+		header = append(header, k)
+	}
+	t.AppendHeader(header)
+
+	// 表格内容
+	for _, ip := range addrs {
+		res := results[ip]
+		if !res.Success {
+			row := table.Row{ip}
+			for i := 0; i < len(standardFields)+len(sortedCustomFields); i++ {
+				row = append(row, "执行失败")
+			}
+			t.AppendRow(row)
+			continue
+		}
+
+		data := hostDataCache[ip]
+		row := table.Row{ip}
+		// 标准字段
+		for _, f := range standardFields {
+			val := data[f.key]
+			if val == "" {
+				val = "-"
+			}
+			row = append(row, val)
+		}
+
+		// 自定义字段
+		for _, k := range sortedCustomFields {
+			val := data[k]
+			if val == "" {
+				val = "-"
+			}
+			row = append(row, val)
+		}
+		t.AppendRow(row)
+	}
+	switch outputFormat {
+	case "csv":
+		fmt.Println(t.RenderCSV())
+	case "md":
+		fmt.Println(t.RenderMarkdown())
+	case "html":
+		htmlContent := renderHTML(t)
+		fmt.Println(htmlContent)
+	default:
+		// 默认终端表格（圆角样式）
+		t.SetOutputMirror(os.Stdout)
+		t.SetOutputMirror(os.Stdout)
+		t.SetStyle(table.StyleRounded)
+		t.Style().Format.Header = text.FormatDefault
+		t.Render()
+	}
+}
+func renderHTML(t table.Writer) string {
+	htmlTable := t.RenderHTML()
+	// 加上完整的 HTML 文档头，指定 UTF-8 编码
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>fastdp 巡检报告</title>
+    <style>
+        table { border-collapse: collapse; width: 100%%; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+%s
+</body>
+</html>`, htmlTable)
+}
+
+// 解析 key=value 格式
+func parseCheckOutput(output string) map[string]string {
+	data := make(map[string]string)
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.Contains(line, "=") {
+			continue
+		}
+		kv := strings.SplitN(line, "=", 2)
+		k := strings.TrimSpace(kv[0])
+		v := strings.TrimSpace(kv[1])
+		data[k] = v
+	}
+	return data
 }

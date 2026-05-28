@@ -10,14 +10,13 @@ import (
 )
 
 var shellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: "在远程主机执行 shell 命令",
+	Use:           "shell",
+	Short:         "在远程主机执行 shell 命令",
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		// 检查必需参数是否提供
 		if aValue, _ := cmd.Flags().GetString("args"); aValue == "" {
-			fmt.Fprintln(cmd.ErrOrStderr(), "错误: 必须指定要执行的 shell 命令")
-			fmt.Fprintln(cmd.ErrOrStderr(), "使用 --help 查看帮助信息")
-			return fmt.Errorf("缺少必需参数")
+			return fmt.Errorf("必须指定要执行的 shell 命令\n使用 --help 查看帮助信息")
 		}
 		return nil
 	},

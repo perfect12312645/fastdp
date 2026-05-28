@@ -16,6 +16,7 @@ type ConfigList struct {
 	DefaultSSHPassword string // 驼峰
 	DefaultSSHTimeout  int    // 驼峰
 	DefaultExecTimeout int    // 驼峰
+	DefaultFetchPath   string
 }
 
 var GlobalConfig *ConfigList
@@ -80,6 +81,7 @@ func ParseConfig(configFile string) (*ConfigList, error) {
 		DefaultSSHPassword: viper.GetString("default_ssh_password"),
 		DefaultSSHTimeout:  viper.GetInt("default_ssh_timeout"),
 		DefaultExecTimeout: viper.GetInt("default_exec_timeout"),
+		DefaultFetchPath:   viper.GetString("default_fetch_path"),
 	}
 
 	GlobalConfig = cfg

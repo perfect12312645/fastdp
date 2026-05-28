@@ -13,18 +13,16 @@ import (
 
 // copy 命令
 var copyCmd = &cobra.Command{
-	Use:   "copy",
-	Short: "复制文件到远程主机",
+	Use:           "copy",
+	Short:         "复制文件到远程主机",
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		// 正确获取两个参数并判断（修复语法错误）
 		sValue, _ := cmd.Flags().GetString("source")
 		dValue, _ := cmd.Flags().GetString("dest")
 
 		if sValue == "" || dValue == "" {
-			// 输出到错误流（符合规范）
-			fmt.Fprintln(cmd.ErrOrStderr(), "错误: 必须指定要copy的源文件（-s）和目标位置（-d）")
-			fmt.Fprintln(cmd.ErrOrStderr(), "使用 --help 查看帮助信息")
-			return fmt.Errorf("缺少必需参数")
+			return fmt.Errorf("必须指定要copy的源文件(-s)和目标位置(-d)\n使用 --help 查看帮助信息")
 		}
 		return nil
 	},

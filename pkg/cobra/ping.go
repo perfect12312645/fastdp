@@ -10,8 +10,10 @@ import (
 
 // ping 命令
 var pingCmd = &cobra.Command{
-	Use:   "ping",
-	Short: "测试主机连通性",
+	Use:           "ping",
+	Short:         "测试主机连通性",
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	Run: func(cmd *cobra.Command, args []string) {
 		// 处理主机组参数（如 web/all）
 		config.GlobalFlags.HostInventory = args
