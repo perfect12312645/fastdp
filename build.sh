@@ -39,6 +39,7 @@ fi
 # 检查是否安装 rpmbuild
 if ! command -v rpmbuild &> /dev/null; then
     echo "⚠️ 未安装 rpmbuild，跳过 RPM 构建"
+    echo "yum install rpm-build -y"
     exit 1
 fi
 echo "✅ git 版本：$(git --version | head -n1)"
@@ -61,6 +62,7 @@ PLATFORMS=(
     "darwin amd64"
     "darwin arm64"
 )
+go env -w GOPROXY=https://goproxy.cn
 
 # 5. 开始交叉编译
 echo -e "\n==== 开始编译 ===="
@@ -70,7 +72,7 @@ for platform in "${PLATFORMS[@]}"; do
     BIN_NAME="fastdp"
 
     echo -e "\n→ 编译 $GOOS/$GOARCH"
-    CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -o $BIN_NAME -ldflags "-w -s"
+    CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -o $BIN_NAME -ldflags "-w -s" cmd/main.go
 
     # 创建打包目录
     PKG_NAME="fastdp-$VERSION-$GOOS-$GOARCH"
@@ -93,35 +95,53 @@ done
 
 # ====================== RPM 构建 ======================
 echo -e "\n==== 构建 RPM 包 ===="
+# 询问是否构建 RPM
+read -p "是否构建 RPM 包？(y/n): " build_rpm
+if [[ "$build_rpm" != "y" && "$build_rpm" != "Y" ]]; then
+    echo "⚠️ 跳过 RPM 构建"
+    goto rpm_end
+fi
 
-RPM_ARCHS=("x86_64" "aarch64")
+# 检查 rpmbuild
+if ! command -v rpmbuild &> /dev/null; then
+    echo "⚠️ 未安装 rpmbuild，正在自动安装..."
+    yum install rpm-build -y
+fi
+
+# 自动获取当前系统架构
+CURRENT_ARCH=$(arch)
+echo "✅ 当前机器架构：$CURRENT_ARCH"
+RPM_ARCHS=("$CURRENT_ARCH")
+VERSION_NO_V=${VERSION//v/}
 
 for ARCH in "${RPM_ARCHS[@]}"; do
     echo -e "\n→ 构建 RPM：$ARCH"
 
-    # 重新编译对应架构二进制
     GOOS=linux
     GOARCH=$ARCH
-    if [ "$ARCH" = "x86_64" ]; then GOARCH="amd64"; fi
 
-    CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -o fastdp -ldflags "-w -s"
+    if [ "$ARCH" = "x86_64" ]; then
+        GOARCH="amd64"
+    elif [ "$ARCH" = "aarch64" ]; then
+        GOARCH="arm64"
+    fi
 
-    # RPM 构建目录
+    echo "→ GO 编译架构：$GOOS/$GOARCH"
+    CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -o fastdp -ldflags "-w -s" cmd/main.go
+
     RPM_BUILD_DIR=rpmbuild
     mkdir -p $RPM_BUILD_DIR/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-    # 复制文件
-    mkdir -p $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION/usr/local/bin
-    mkdir -p $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION/etc/fastdp
+    mkdir -p $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin
+    mkdir -p $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp
 
-    cp -a fastdp $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION/usr/local/bin/
-    cp -a config.toml host fastdp-check.sh $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION/etc/fastdp/ 2>/dev/null || true
+    cp -a fastdp $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/
+    cp -a config.toml host fastdp-check.sh README.txt $RPM_BUILD_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/ 2>/dev/null || true
 
-    # 生成 SPEC 文件
     cat > $RPM_BUILD_DIR/SPECS/fastdp.spec << EOF
 Name:           fastdp
-Version:        ${VERSION//v/}
-Release:        1%{?dist}
+Version:        $VERSION_NO_V
+Release:        1
 Summary:        Batch SSH operation tool
 License:        MIT
 URL:            $REPO_URL
@@ -143,14 +163,11 @@ cp -a %{_sourcedir}/fastdp-%{version}/etc/fastdp/* %{buildroot}/etc/fastdp/
 %changelog
 EOF
 
-    # 构建 RPM
     rpmbuild --define "_topdir $(pwd)/$RPM_BUILD_DIR" -bb $RPM_BUILD_DIR/SPECS/fastdp.spec
-
-    # 复制产物
     find $RPM_BUILD_DIR/RPMS -name "*.rpm" -exec cp -a {} ../$OUTPUT_DIR/ \;
-
     rm -rf $RPM_BUILD_DIR
 done
+
 # 结束
 cd ..
 echo -e "\n==== 构建完成 ===="
