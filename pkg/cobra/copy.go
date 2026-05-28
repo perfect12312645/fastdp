@@ -49,7 +49,7 @@ var copyCmd = &cobra.Command{
 		Logger.Sugar().Debugf("copy模块，开始计算源文件md5: %v", time.Now())
 		config.GlobalFlags, err = module.GetSource(config.GlobalFlags)
 		if err != nil {
-			Logger.Sugar().Errorf("copy模块，获取源文件信息失败: %v", err)
+			Errorf("copy模块，获取源文件信息失败: %v", err)
 			os.Exit(1)
 		}
 		Logger.Sugar().Debugf("copy模块，计算源文件md5结束: %v", time.Now())

@@ -11,11 +11,15 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 )
 
+var (
+	Version = "v6.0.0"
+)
 var rootCmd = &cobra.Command{
 	Use:   "fastdp",
 	Short: "轻量级 Ansible 风格运维工具",
@@ -40,7 +44,15 @@ var rootCmd = &cobra.Command{
   fastdp script -f /tmp/check.sh all
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-
+		showVersion, _ := cmd.Flags().GetBool("version")
+		if showVersion {
+			fmt.Printf("fastdp version %s %s/%s\n",
+				Version,
+				runtime.GOOS,   // 自动获取：linux/darwin/windows
+				runtime.GOARCH, // 自动获取：amd64/arm64
+			)
+			os.Exit(0)
+		}
 		// 读取全局参数
 		config.GlobalFlags.Concurrency, _ = cmd.Flags().GetInt("concurrency")
 		config.GlobalFlags.Debug, _ = cmd.Flags().GetBool("debug")
@@ -94,6 +106,7 @@ func init() {
 	rootCmd.PersistentFlags().IntP("concurrency", "c", concurrencyDefault, "并发连接数")
 	rootCmd.PersistentFlags().BoolP("debug", "v", debug, "是否开启调试模式")
 	rootCmd.PersistentFlags().StringP("inventory", "i", "", "指定主机清单文件 (优先于配置文件)")
+	rootCmd.PersistentFlags().BoolP("version", "V", false, "显示版本信息")
 
 	// 添加子命令
 	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd)
