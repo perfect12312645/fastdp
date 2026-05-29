@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fastdp/pkg/config"
+	"fastdp/pkg/log"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"os"
@@ -53,6 +54,8 @@ func SshConnect(allHosts []*Host) []HostSession {
 			if port == "" {
 				port = "22" // 最终兜底
 			}
+
+			log.Logger.Sugar().Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"])
 
 			// 认证方式选择
 			var authMethods []ssh.AuthMethod

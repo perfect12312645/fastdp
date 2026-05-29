@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bufio"
-	. "fastdp/pkg/log"
 	"fmt"
 	"os"
 	"regexp"
@@ -21,7 +20,7 @@ type HostGroup struct {
 }
 
 // 解析 fastdp 的主机配置文件
-func parseHostsFile(path string) ([]*HostGroup, error) {
+func ParseHostsFile(path string) ([]*HostGroup, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("打开文件失败: %v", err)
@@ -97,33 +96,10 @@ func parseHostsFile(path string) ([]*HostGroup, error) {
 	return groups, nil
 }
 
-func HostParse(host string) ([]*HostGroup, error) {
-	// 解析配置文件（假设文件名为 fastdp.hosts）
-	groups, err := parseHostsFile(host)
-	if err != nil {
-		return nil, err
-	}
-
-	// 打印解析结果
-	for _, group := range groups {
-		Logger.Sugar().Debugf("主机组:%s", group.Name)
-		for _, host := range group.Hosts {
-			if _, ok := host.Params["port"]; !ok {
-				host.Params["port"] = "22" // 默认端口
-			}
-			if _, ok := host.Params["user"]; !ok {
-				host.Params["user"] = "root" // 默认用户
-			}
-			Logger.Sugar().Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"])
-		}
-	}
-	return groups, err
-}
-
 // 获取将要执行的主机组
-func Inventory(Args []string, groups []*HostGroup) ([]*HostGroup, []*Host) {
+func Inventory(Args []string, groups []*HostGroup) ([]*HostGroup, []*Host, error) {
 	if len(Args) == 0 {
-		Errorf("ERROR: 请指定目标主机组")
+		return nil, nil, fmt.Errorf("请指定目标主机组")
 	}
 
 	// 优化 groupMap：键为组名，值为对应的 HostGroup 实例（便于快速查找）
@@ -163,10 +139,10 @@ func Inventory(Args []string, groups []*HostGroup) ([]*HostGroup, []*Host) {
 
 	// 如果指定了 "all"，直接返回所有主机组
 	if hasAll {
-		return groups, nil
+		return groups, nil, nil
 	}
 
-	return inventory, hosts
+	return inventory, hosts, nil
 }
 func Filter(groups []*HostGroup, hosts []*Host) []*Host {
 	var allHosts []*Host

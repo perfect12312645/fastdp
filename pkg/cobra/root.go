@@ -131,19 +131,23 @@ func GetInfo() ([]*Host, error) {
 
 	Logger.Sugar().Debugf("生效的配置文件路径: %s", config.GlobalConfig.ConfigAbsPath)
 	Logger.Sugar().Debugf("生效的机组文件路径: %s", hostInventory)
-
-	// 主机清单解析
-	groups, err := HostParse(hostInventory)
+	groups, err := ParseHostsFile(hostInventory)
 	if err != nil {
-		return nil, fmt.Errorf("解析host文件失败: %w", err) // 错误往上抛
+		return nil, fmt.Errorf("解析host文件失败: %w", err)
 	}
 
 	if len(groups) == 0 {
 		return nil, fmt.Errorf("主机组为空，请配置host文件：%s", hostInventory)
 	}
+	for _, group := range groups {
+		Logger.Sugar().Debugf("主机组:%s", group.Name)
+	}
 
 	// 获取将要执行的主机组
-	inventory, hosts := Inventory(config.GlobalFlags.HostInventory, groups)
+	inventory, hosts, err := Inventory(config.GlobalFlags.HostInventory, groups)
+	if err != nil {
+		return nil, err
+	}
 	execHosts := Filter(inventory, hosts)
 
 	// 打印调试日志
@@ -376,7 +380,6 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 		fmt.Println(htmlContent)
 	default:
 		// 默认终端表格（圆角样式）
-		t.SetOutputMirror(os.Stdout)
 		t.SetOutputMirror(os.Stdout)
 		t.SetStyle(table.StyleRounded)
 		t.Style().Format.Header = text.FormatDefault

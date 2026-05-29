@@ -52,33 +52,33 @@ func NewCopyModule() Module {
 	return &CopyModule{}
 }
 
-func GetSource(flags *config.Flags) (*config.Flags, error) {
+func GetSource(flags *config.Flags) error {
 	// （原有逻辑不变）
 	src := flags.Parameter["source"]
 	dest := flags.Parameter["dest"]
 
 	if !filepath.IsAbs(dest) {
-		return nil, fmt.Errorf("目标文件位置必须输入绝对路径，当前输入为:%s", dest)
+		fmt.Errorf("目标文件位置必须输入绝对路径，当前输入为:%s", dest)
 	}
 	srcAbs, err := filepath.Abs(src)
 	if err != nil {
-		return nil, fmt.Errorf("获取源文件失败%s", err.Error())
+		return fmt.Errorf("获取源文件失败%s", err.Error())
 	}
 	srcf, err := os.Stat(srcAbs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("源文件不存在: %s", srcAbs)
+			return fmt.Errorf("源文件不存在: %s", srcAbs)
 		}
-		return nil, fmt.Errorf("获取源文件信息失败: %s", err.Error())
+		return fmt.Errorf("获取源文件信息失败: %s", err.Error())
 	}
 	Logger.Sugar().Debugf("源文件名%s", srcf.Name())
 	if srcf.IsDir() {
-		return nil, fmt.Errorf("不支持目录复制: %s", srcAbs)
+		return fmt.Errorf("不支持目录复制: %s", srcAbs)
 	}
 
 	srcMd5, err := FileMD5(srcAbs)
 	if err != nil {
-		return nil, fmt.Errorf("计算源文件md5失败:%s", err.Error())
+		return fmt.Errorf("计算源文件md5失败:%s", err.Error())
 	}
 	flags.Parameter["srcFileSize"] = fmt.Sprintf("%d", srcf.Size())
 	flags.Parameter["srcAbsPath"] = srcAbs
@@ -86,7 +86,7 @@ func GetSource(flags *config.Flags) (*config.Flags, error) {
 	flags.Parameter["srcFileName"] = srcf.Name()
 	flags.Parameter["srcFileMode"] = fmt.Sprintf("%03o", srcf.Mode()&os.ModePerm)
 
-	return flags, nil
+	return nil
 }
 
 func (m *CopyModule) Run(hs HostSession, flags *config.Flags) Result {

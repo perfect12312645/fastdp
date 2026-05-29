@@ -47,7 +47,7 @@ var copyCmd = &cobra.Command{
 		}
 		// 转换为Debug日志，使用%v格式化时间对象
 		Logger.Sugar().Debugf("copy模块，开始计算源文件md5: %v", time.Now())
-		config.GlobalFlags, err = module.GetSource(config.GlobalFlags)
+		err = module.GetSource(config.GlobalFlags)
 		if err != nil {
 			Errorf("copy模块，获取源文件信息失败: %v", err)
 			os.Exit(1)
@@ -63,7 +63,9 @@ var copyCmd = &cobra.Command{
 	Args: cobra.MinimumNArgs(1),
 }
 
-var _ = copyCmd.Flags().StringP("source", "s", "", "源文件路径 (必需)")
-var _ = copyCmd.Flags().StringP("dest", "d", "", "目标路径 (必需)")
-var _ = copyCmd.MarkFlagRequired("source")
-var _ = copyCmd.MarkFlagRequired("dest")
+func init() {
+	copyCmd.Flags().StringP("source", "s", "", "源文件路径 (必需)")
+	copyCmd.Flags().StringP("dest", "d", "", "目标路径 (必需)")
+	_ = copyCmd.MarkFlagRequired("source")
+	_ = copyCmd.MarkFlagRequired("dest")
+}

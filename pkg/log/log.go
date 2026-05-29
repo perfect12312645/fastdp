@@ -32,7 +32,7 @@ func InitLogger(debug bool) *zap.Logger {
 	// 创建核心组件
 	core := zapcore.NewCore(encoder, consoleWs, level)
 	logger := zap.New(core)
-	logger.Debug("输出日志位置：终端")
+	logger.Sugar().Debugf("输出日志位置：终端")
 	defer logger.Sync()
 	return logger
 }

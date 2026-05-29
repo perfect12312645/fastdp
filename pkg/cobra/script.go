@@ -83,5 +83,8 @@ var scriptCmd = &cobra.Command{
 }
 
 // 注册参数
-var _ = scriptCmd.Flags().StringP("file", "f", "", "本地脚本路径 (必需)")
-var _ = scriptCmd.MarkFlagRequired("file")
+
+func init() {
+	scriptCmd.Flags().StringP("file", "f", "", "本地脚本路径 (必需)")
+	_ = scriptCmd.MarkFlagRequired("file")
+}

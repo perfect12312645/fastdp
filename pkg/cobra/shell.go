@@ -56,6 +56,7 @@ var shellCmd = &cobra.Command{
 	Args: cobra.MinimumNArgs(1),
 }
 
-// 在包级别初始化时注册标志
-var _ = shellCmd.Flags().StringP("args", "a", "", "要执行的 shell 命令 (必需)")
-var _ = shellCmd.MarkFlagRequired("args")
+func init() {
+	shellCmd.Flags().StringP("args", "a", "", "要执行的 shell 命令 (必需)")
+	_ = shellCmd.MarkFlagRequired("args")
+}

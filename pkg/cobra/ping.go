@@ -35,4 +35,7 @@ var pingCmd = &cobra.Command{
 	Example: `  ansible-tool ping web
   ansible-tool ping all --timeout 3`,
 }
-var _ = pingCmd.Flags().IntP("timeout", "t", 5, "连接超时时间(秒)")
+
+func init() {
+	pingCmd.Flags().IntP("timeout", "t", 5, "连接超时时间(秒)")
+}

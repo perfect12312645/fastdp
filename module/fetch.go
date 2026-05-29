@@ -27,7 +27,12 @@ func getFetchProgressWriter() progress.Writer {
 		fetchProgressWriter.Style().Visibility.ETA = true
 		fetchProgressWriter.Style().Visibility.Speed = true
 		fetchProgressWriter.Style().Visibility.Percentage = true
+		// ✅ 限制消息部分最大宽度（字符数），避免超长导致换行
+		fetchProgressWriter.SetMessageWidth(45)
+		fetchProgressWriter.SetAutoStop(true)
+
 		go fetchProgressWriter.Render()
+
 	})
 	return fetchProgressWriter
 }
