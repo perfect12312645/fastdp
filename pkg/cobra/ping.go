@@ -33,6 +33,7 @@ var pingCmd = &cobra.Command{
 	},
 	Example: `
   fastdp ping web
+
   fastdp ping all`,
 	Args: cobra.MinimumNArgs(1),
 }
