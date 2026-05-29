@@ -101,13 +101,16 @@ build_rpm() {
     cp fastdp $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/
     cp config.toml host fastdp-check.sh README.txt $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/ 2>/dev/null || true
 
-    cat > $RPM_DIR/SPECS/fastdp.spec <<EOF
+cat > $RPM_DIR/SPECS/fastdp.spec <<EOF
 Name: fastdp
 Version: $VERSION_NO_V
 Release: 1
 Summary: Batch SSH tool
 License: MIT
 BuildArch: $ARCH
+
+%description
+Batch SSH operation tool for fastdp
 
 %install
 cp -r %{_sourcedir}/fastdp-%{version}/* %{buildroot}/

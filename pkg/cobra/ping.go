@@ -17,8 +17,7 @@ var pingCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// 处理主机组参数（如 web/all）
 		config.GlobalFlags.HostInventory = args
-		tValue, _ := cmd.Flags().GetString("timeout")
-		config.GlobalFlags.Parameter["timeout"] = tValue
+
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
@@ -32,10 +31,8 @@ var pingCmd = &cobra.Command{
 		}
 		execute(hostSessions, config.GlobalFlags, mod)
 	},
-	Example: `  ansible-tool ping web
-  ansible-tool ping all --timeout 3`,
-}
-
-func init() {
-	pingCmd.Flags().IntP("timeout", "t", 5, "连接超时时间(秒)")
+	Example: `
+  fastdp ping web
+  fastdp ping all`,
+	Args: cobra.MinimumNArgs(1),
 }
