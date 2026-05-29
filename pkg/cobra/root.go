@@ -81,7 +81,7 @@ func init() {
 	configPath := config.FindConfigFile()
 	if configPath == "" {
 		// 处理用户目录获取失败等错误（如无权限）
-		fmt.Println("警告：获取配置路径/etc/fastdp/config.toml失败,将使用默认配置config.toml")
+		fmt.Println("警告：未找到全局配置，将使用当前目录 config.toml")
 		configPath = "config.toml" // 兜底
 	}
 

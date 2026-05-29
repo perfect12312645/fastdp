@@ -120,10 +120,15 @@ func publicKeyAuth() (ssh.AuthMethod, error) {
 		"id_ecdsa",
 		"id_dsa",
 	}
+	// 先获取用户主目录
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("获取用户主目录失败: %v", err)
+	}
 	// 遍历尝试
 	for _, keyName := range privateKeys {
 		// 获取用户主目录下的私钥文件路径（默认 ~/.ssh/id_rsa）
-		keyPath := filepath.Join(os.Getenv("HOME"), ".ssh", keyName)
+		keyPath := filepath.Join(homeDir, ".ssh", keyName)
 		// 检查文件是否存在
 		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 			continue // 不存在就跳过

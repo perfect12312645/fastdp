@@ -99,6 +99,7 @@ build_rpm() {
     mkdir -p $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/{/usr/local/bin,/etc/fastdp}
 
     cp fastdp $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/
+    chmod 755 $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/fastdp
     cp config.toml host fastdp-check.sh README.txt $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/ 2>/dev/null || true
 
 cat > $RPM_DIR/SPECS/fastdp.spec <<EOF
@@ -116,6 +117,7 @@ Batch SSH operation tool for fastdp
 cp -r %{_sourcedir}/fastdp-%{version}/* %{buildroot}/
 
 %files
+%defattr(644,root,root,755)
 /usr/local/bin/fastdp
 /etc/fastdp/*
 EOF

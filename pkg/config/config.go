@@ -14,9 +14,8 @@ type ConfigList struct {
 	DefaultSSHPort     int    // 驼峰
 	DefaultSSHUser     string // 驼峰
 	DefaultSSHPassword string // 驼峰
-	DefaultSSHTimeout  int    // 驼峰
-	DefaultExecTimeout int    // 驼峰
-	DefaultFetchPath   string
+	DefaultSSHTimeout int    // 驼峰
+	DefaultFetchPath  string
 }
 
 var GlobalConfig *ConfigList
@@ -32,13 +31,9 @@ var GlobalFlags = &Flags{
 	Parameter: make(map[string]string),
 }
 
-// 查找配置文件
+// 查找配置文件 【优先级：用户目录 > 系统目录 > 当前目录】
 func FindConfigFile() string {
-	systemPath := "/etc/fastdp/config.toml"
-	if _, err := os.Stat(systemPath); err == nil {
-		return systemPath
-	}
-
+	// 1. 优先：用户家目录（最高优先级）
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		userPath := filepath.Join(homeDir, ".fastdp", "config.toml")
@@ -47,9 +42,15 @@ func FindConfigFile() string {
 		}
 	}
 
+	// 2. 其次：系统全局配置
+	systemPath := "/etc/fastdp/config.toml"
+	if _, err := os.Stat(systemPath); err == nil {
+		return systemPath
+	}
+
+	// 3. 都没有：返回空（外部兜底当前目录）
 	return ""
 }
-
 func ParseConfig(configFile string) (*ConfigList, error) {
 	absPath, err := filepath.Abs(configFile)
 	if err != nil {
@@ -80,7 +81,6 @@ func ParseConfig(configFile string) (*ConfigList, error) {
 		DefaultSSHUser:     viper.GetString("default_ssh_user"),
 		DefaultSSHPassword: viper.GetString("default_ssh_password"),
 		DefaultSSHTimeout:  viper.GetInt("default_ssh_timeout"),
-		DefaultExecTimeout: viper.GetInt("default_exec_timeout"),
 		DefaultFetchPath:   viper.GetString("default_fetch_path"),
 	}
 

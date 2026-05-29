@@ -7,10 +7,23 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"os"
+	"path/filepath"
 )
 
-// 固定巡检脚本路径（你定死的）
-const defaultCheckScript = "/etc/fastdp/fastdp-check.sh"
+// getCheckScriptPath 获取巡检脚本路径：用户目录优先，系统目录兜底
+func getCheckScriptPath() string {
+	// 1. 优先：用户家目录
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		userScript := filepath.Join(homeDir, ".fastdp", "fastdp-check.sh")
+		if _, err := os.Stat(userScript); err == nil {
+			return userScript
+		}
+	}
+
+	// 2. 兜底：系统全局路径
+	return "/etc/fastdp/fastdp-check.sh"
+}
 
 var checkCmd = &cobra.Command{
 	Use:           "check",
@@ -18,16 +31,18 @@ var checkCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// 获取最终脚本路径
+		checkScript := getCheckScriptPath()
 		// 固定判断脚本是否存在
-		stat, err := os.Stat(defaultCheckScript)
+		stat, err := os.Stat(checkScript)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return fmt.Errorf("巡检脚本不存在 → %s", defaultCheckScript)
+				return fmt.Errorf("巡检脚本不存在 → %s", checkScript)
 			}
 			return fmt.Errorf("读取脚本失败: %v", err)
 		}
 		if stat.IsDir() {
-			return fmt.Errorf("错误：%s 是目录，必须是脚本文件", defaultCheckScript)
+			return fmt.Errorf("错误：%s 是目录，必须是脚本文件", checkScript)
 		}
 
 		vertical, _ := cmd.Flags().GetBool("vertical")
@@ -46,6 +61,9 @@ var checkCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		// 获取最终脚本路径
+		checkScript := getCheckScriptPath()
+
 		vertical, _ := cmd.Flags().GetBool("vertical")
 		if vertical {
 			config.GlobalFlags.Parameter["vertical"] = "true"
@@ -55,7 +73,7 @@ var checkCmd = &cobra.Command{
 		// 主机组参数
 		config.GlobalFlags.HostInventory = args
 
-		config.GlobalFlags.Parameter["script_file"] = defaultCheckScript
+		config.GlobalFlags.Parameter["script_file"] = checkScript
 
 		execHosts, err := GetInfo()
 		if err != nil {
@@ -73,7 +91,7 @@ var checkCmd = &cobra.Command{
 	},
 	Example: `
   # 对所有主机执行环境检查（默认表格输出）
-  # 注：巡检脚本固定路径为 /etc/fastdp/fastdp-check.sh，可自行编辑自定义输出内容
+  # 巡检脚本路径优先级：~/.fastdp/fastdp-check.sh > /etc/fastdp/fastdp-check.sh 可自行编辑自定义输出内容
   fastdp check all
 
   # 竖向格式化输出（类似 mysql \\G）

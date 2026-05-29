@@ -75,9 +75,6 @@ var scriptCmd = &cobra.Command{
 
   # 执行本地脚本到指定组和IP
   fastdp script -f check.sh master node 192.168.10.100
-
-  # 脚本自动上传、执行、自动清理
-  fastdp script -f init.sh db
 `,
 	Args: cobra.MinimumNArgs(1),
 }
