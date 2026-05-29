@@ -45,6 +45,7 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 	// 1. 获取参数
 	remotePath := flags.Parameter["remote"] // 远程文件（支持通配符 /tmp/sec*）
 	localDest := flags.Parameter["dest"]    // 本地保存目录
+	noIpDir := flags.Parameter["no_ip_dir"] // 是否去掉IP目录
 
 	if localDest == "" {
 		localDest = config.GlobalConfig.DefaultFetchPath
@@ -88,7 +89,16 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 	// 4. 逐个下载文件
 	var downloadedFiles []string
 	for _, f := range files {
-		localFile := filepath.Join(localDest, hs.Addr, filepath.Base(f))
+		var localFile string
+		filename := filepath.Base(f)
+
+		if noIpDir == "true" {
+			// ✅ 启用：不创建IP目录 → 文件名 = IP_原文件名
+			localFile = filepath.Join(localDest, fmt.Sprintf("%s_%s", hs.Addr, filename))
+		} else {
+			// ✅ 默认：创建IP目录
+			localFile = filepath.Join(localDest, hs.Addr, filename)
+		}
 		localDir := filepath.Dir(localFile)
 		// 2. 获取进度条总管
 		pw := getFetchProgressWriter()

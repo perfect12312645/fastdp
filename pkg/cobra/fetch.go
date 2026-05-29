@@ -28,9 +28,11 @@ var fetchCmd = &cobra.Command{
 		// 获取远程文件 & 本地保存目录
 		remoteFile, _ := cmd.Flags().GetString("remote")
 		localDir, _ := cmd.Flags().GetString("dest")
+		noIpDir, _ := cmd.Flags().GetBool("no-ip-dir")
 
 		config.GlobalFlags.Parameter["remote"] = remoteFile
 		config.GlobalFlags.Parameter["dest"] = localDir
+		config.GlobalFlags.Parameter["no_ip_dir"] = fmt.Sprintf("%v", noIpDir)
 
 		execHosts, err := GetInfo()
 		if err != nil {
@@ -59,6 +61,9 @@ var fetchCmd = &cobra.Command{
   # 指定本地保存目录（默认 ./fastdp-fetch）
   fastdp fetch -r "/tmp/sec?" --dest ./my-download all
 
+  # 不创建IP目录，文件名为：IP_文件名（避免重名）
+  fastdp fetch -r "/tmp/*.log" --no-ip-dir all
+
   # 支持通配符 * ?
   fastdp fetch -r "/tmp/sec-*.log" all
 `,
@@ -74,4 +79,6 @@ func init() {
 
 	// 本地保存目录（默认 ./fastdp-fetch）
 	fetchCmd.Flags().StringP("dest", "d", "", "本地保存目录,默认./fastdp-fetch")
+
+	fetchCmd.Flags().BoolP("no-ip-dir", "", false, "拉取文件时不创建IP目录，文件名为 主机IP_文件名")
 }
