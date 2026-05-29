@@ -117,7 +117,6 @@ Batch SSH operation tool for fastdp
 cp -r %{_sourcedir}/fastdp-%{version}/* %{buildroot}/
 
 %files
-%defattr(644,root,root,755)
 /usr/local/bin/fastdp
 /etc/fastdp/*
 EOF
