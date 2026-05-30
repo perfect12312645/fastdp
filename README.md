@@ -78,10 +78,13 @@ cp fastdp /usr/local/bin/
 
 # 创建配置目录并复制模板
 mkdir -p /etc/fastdp
-cp config.toml host fastdp-check.sh /etc/fastdp/
+cp * /etc/fastdp/
 
-# 编辑主机组配置
+# 编辑主机组配置，按模版添加目标主机
 vim /etc/fastdp/host
+
+# 安装完成后即可使用
+fastdp --help
 ```
 
 #### RPM 包（CentOS / Rocky / openEuler 等）
@@ -116,7 +119,7 @@ RPM/DEB 安装后，所有普通用户都能使用 fastdp。配置文件位于 /
 
 ### 普通用户自定义配置
 
-RPM/DEB 安装后，普通用户无法修改 /etc/fastdp/ 下的文件。如需自定义配置，可以复制到家目录：
+安装后，普通用户通常无权限修改 /etc/fastdp/ 下的文件。如需自定义配置，可以复制到家目录：
 
 ```bash
 # 创建用户配置目录
@@ -129,7 +132,8 @@ cp /etc/fastdp/fastdp-check.sh ~/.fastdp/
 
 # 编辑用户自有配置
 vim ~/.fastdp/config.toml
-# 将host_inventory的值改成~/.fastdp/host
+# 将host_inventory的值改成~/.fastdp/host对应的绝对路径
+# 比如macos中为/Users/用户名/.fastdp或者linux中为/home/用户名/.fastdp
 vim ~/.fastdp/host
 ```
 
