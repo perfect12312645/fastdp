@@ -48,10 +48,10 @@
 
 | 平台 | 架构 | 下载地址 |
 |------|------|---------|
-| Linux | amd64 | [fastdp-v6-linux-amd64.tar.gz](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-amd64.tar.gz) |
-| Linux | arm64 | [fastdp-v6-linux-arm64.tar.gz](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-arm64.tar.gz) |
-| macOS | amd64 | [fastdp-v6-darwin-amd64.tar.gz](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-darwin-amd64.tar.gz) |
-| macOS | arm64 | [fastdp-v6-darwin-arm64.tar.gz](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-darwin-arm64.tar.gz) |
+| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-linux-amd64.tar.gz) |
+| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-linux-arm64.tar.gz) |
+| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-darwin-amd64.tar.gz) |
+| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-darwin-arm64.tar.gz) |
 
 tar.gz 包内容：
 
@@ -123,8 +123,10 @@ fastdp --help
 > **注意**：包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
 
 ```bash
-# 下载
+# 下载（Gitee）
 wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm
+# 或 GitHub
+wget https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm
 
 # 安装（需要 root 权限）
 sudo rpm -ivh fastdp-6-1.ky10.x86_64.rpm
@@ -136,8 +138,10 @@ fastdp --help
 #### DEB 包（Ubuntu / Debian 等）
 
 ```bash
-# 下载
+# 下载（Gitee）
 wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-amd64.deb
+# 或 GitHub
+wget https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-linux-amd64.deb
 
 # 安装（需要 root 权限）
 sudo dpkg -i fastdp-v6-linux-amd64.deb
@@ -164,13 +168,19 @@ vim ~/.fastdp/config.toml
 
 ```bash
 # 直接编译（适合开发者或自定义构建）
+# Gitee
 git clone https://gitee.com/zhao-pengfei2/fastdp.git
+# 或 GitHub
+git clone https://github.com/perfect12312645/fastdp.git
 cd fastdp
 go build -o fastdp ./cmd/main.go
 sudo cp fastdp /usr/local/bin/
 
 # 或使用构建脚本打发布包（自动下载源码并构建 tar.gz / rpm / deb）
+# Gitee
 wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/build.sh
+# 或 GitHub
+wget https://github.com/perfect12312645/fastdp/releases/download/v6/build.sh
 chmod +x build.sh
 ./build.sh
 ```
@@ -553,4 +563,4 @@ default_fetch_path = "./fastdp-fetch"
 ## 帮助与反馈
 
 - 查看命令帮助：`fastdp --help` 或 `fastdp [模块名] --help`
-- 提交 issue：https://gitee.com/zhao-pengfei2/fastdp/issues
+- 提交 issue：[Gitee](https://gitee.com/zhao-pengfei2/fastdp/issues) \| [GitHub](https://github.com/perfect12312645/fastdp/issues)
