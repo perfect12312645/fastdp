@@ -197,7 +197,8 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module)
 	// 按照IP地址排序（字符串排序）
 	sort.Strings(addrs)
 
-	if flags.Parameter["script_file"] == "/etc/fastdp/fastdp-check.sh" {
+	// 仅 check 命令触发表格美化，避免 script 模块同名脚本误匹配
+	if flags.Parameter["_check_module"] == "true" {
 		PolishOutput(addrs, results)
 		return
 	}

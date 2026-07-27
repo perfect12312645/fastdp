@@ -64,7 +64,9 @@ fastdp-v6-linux-amd64/
 └── README.txt          # 说明文件
 ```
 
-安装步骤：
+请选择适合你的安装方式：
+
+### 方式一：系统级安装（推荐 root 用户使用）
 
 ```bash
 # 解压
@@ -73,19 +75,48 @@ tar -zxvf fastdp-v6-linux-amd64.tar.gz
 # 进入目录
 cd fastdp-v6-linux-amd64
 
-# 复制二进制到系统路径
-cp fastdp /usr/local/bin/
+# 安装到系统路径（需要 sudo）
+sudo cp fastdp /usr/local/bin/
+sudo mkdir -p /etc/fastdp
+sudo cp config.toml host fastdp-check.sh /etc/fastdp/
 
-# 创建配置目录并复制模板
-mkdir -p /etc/fastdp
-cp * /etc/fastdp/
+# 编辑主机组配置
+sudo vim /etc/fastdp/host
 
-# 编辑主机组配置，按模版添加目标主机
-vim /etc/fastdp/host
+# 安装完成后即可使用
+sudo fastdp --help
+```
+
+### 方式二：用户级安装（无需 root）
+
+```bash
+# 解压
+tar -zxvf fastdp-v6-linux-amd64.tar.gz
+
+# 进入目录
+cd fastdp-v6-linux-amd64
+
+# 复制到家目录
+mkdir -p ~/.fastdp/bin
+cp fastdp ~/.fastdp/bin/
+cp config.toml host fastdp-check.sh ~/.fastdp/
+
+# 将二进制目录加入 PATH（追加到 ~/.bashrc 或 ~/.zshrc）
+echo 'export PATH="$HOME/.fastdp/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# 编辑配置，将 host_inventory 改成家目录的绝对路径
+vim ~/.fastdp/config.toml
+# host_inventory = "/home/你的用户名/.fastdp/host"
+
+# 编辑主机组配置（默认为连接root用户，注意修改）
+vim ~/.fastdp/host
 
 # 安装完成后即可使用
 fastdp --help
 ```
+
+### 方式三：RPM / DEB 包（自动系统级安装，需 root）
 
 #### RPM 包（CentOS / Rocky / openEuler 等）
 
@@ -115,26 +146,18 @@ sudo dpkg -i fastdp-v6-linux-amd64.deb
 fastdp --help
 ```
 
-RPM/DEB 安装后，所有普通用户都能使用 fastdp。配置文件位于 /etc/fastdp/ 目录下。
+RPM/DEB 安装后，二进制位于 `/usr/local/bin/`，配置文件位于 `/etc/fastdp/`。与方式一相同，默认以 root 身份执行。
 
-### 普通用户自定义配置
-
-安装后，普通用户通常无权限修改 /etc/fastdp/ 下的文件。如需自定义配置，可以复制到家目录：
+普通用户如需自定义配置，可复制到家目录（配置加载时家目录优先级最高）：
 
 ```bash
-# 创建用户配置目录
 mkdir -p ~/.fastdp
-
-# 复制模板
 cp /etc/fastdp/config.toml ~/.fastdp/
 cp /etc/fastdp/host ~/.fastdp/
 cp /etc/fastdp/fastdp-check.sh ~/.fastdp/
-
-# 编辑用户自有配置
 vim ~/.fastdp/config.toml
-# 将host_inventory的值改成~/.fastdp/host对应的绝对路径
-# 比如macos中为/Users/用户名/.fastdp或者linux中为/home/用户名/.fastdp
-vim ~/.fastdp/host
+# 将 host_inventory 的值改成家目录的绝对路径，如：
+# host_inventory = "/home/你的用户名/.fastdp/host"
 ```
 
 ### 从源码编译
@@ -520,8 +543,13 @@ default_fetch_path = "./fastdp-fetch"
    - 开启调试模式（-v）可查看详细的 SSH 连接日志和命令执行过程
    - 若主机连接失败，检查 SSH 端口、认证方式及网络连通性
 6. **check 模块**：
-   - 巡检脚本路径：`~/.fastdp/fastdp-check.sh` > `/etc/fastdp/fastdp-check.sh`
-   - 可自行编辑脚本内容，输出 `key=value` 格式即可自动识别
+    - 巡检脚本路径：`~/.fastdp/fastdp-check.sh` > `/etc/fastdp/fastdp-check.sh`
+    - 可自行编辑脚本内容，输出 `key=value` 格式即可自动识别
+7. **权限说明**：
+    - 方式一（系统级安装）仅限 root 用户执行，安装和普通用户无关
+    - 方式二（用户级安装）无需 root，所有文件位于家目录，互不干扰
+    - 巡检脚本中 `hw_time`（硬件时间）需要 root 权限才能读取，普通用户执行时该字段为空属正常现象
+    - 普通用户如需完整巡检结果，可通过 `sudo hwclock -r` 单独获取硬件时间
 
 ## 帮助与反馈
 

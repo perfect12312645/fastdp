@@ -74,6 +74,7 @@ var checkCmd = &cobra.Command{
 		config.GlobalFlags.HostInventory = args
 
 		config.GlobalFlags.Parameter["script_file"] = checkScript
+		config.GlobalFlags.Parameter["_check_module"] = "true"
 
 		execHosts, err := GetInfo()
 		if err != nil {
