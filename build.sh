@@ -80,6 +80,11 @@ build_tar() {
 
 # 构建 rpm
 build_rpm() {
+    if ! command -v yum &> /dev/null && ! command -v dnf &> /dev/null; then
+        echo -e "${RED}错误：未找到 yum/dnf，RPM 包只能在 RPM 系系统（CentOS/Rocky/openEuler 等）上构建${NC}"
+        echo -e "${YELLOW}请切换到 RPM 系系统，或选择构建 tar.gz 包（跨平台通用）${NC}"
+        exit 1
+    fi
     prepare
     echo -e "\n==== 构建 RPM ===="
     if ! command -v rpmbuild &> /dev/null; then
@@ -127,8 +132,12 @@ EOF
 }
 
 # 构建 deb
-# 构建 deb
 build_deb() {
+    if ! command -v apt &> /dev/null; then
+        echo -e "${RED}错误：未找到 apt，DEB 包只能在 DEB 系系统（Ubuntu/Debian 等）上构建${NC}"
+        echo -e "${YELLOW}请切换到 DEB 系系统，或选择构建 tar.gz 包（跨平台通用）${NC}"
+        exit 1
+    fi
     prepare
     echo -e "\n==== 构建 DEB ===="
     if ! command -v dpkg-deb &> /dev/null; then

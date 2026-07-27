@@ -163,17 +163,16 @@ vim ~/.fastdp/config.toml
 ### 从源码编译
 
 ```bash
-# 克隆仓库
+# 直接编译（适合开发者或自定义构建）
 git clone https://gitee.com/zhao-pengfei2/fastdp.git
 cd fastdp
+go build -o fastdp ./cmd/main.go
+sudo cp fastdp /usr/local/bin/
 
-# 执行构建脚本（运行后按提示选择构建类型：1 tar.gz / 2 rpm / 3 deb）
+# 或使用构建脚本打发布包（自动下载源码并构建 tar.gz / rpm / deb）
+wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/build.sh
 chmod +x build.sh
 ./build.sh
-
-# 或直接编译
-go build -o fastdp ./cmd/main.go
-cp fastdp /usr/local/bin/
 ```
 
 ## 配置文件加载优先级
