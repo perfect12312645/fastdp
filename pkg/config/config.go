@@ -10,12 +10,13 @@ type ConfigList struct {
 	ConfigAbsPath      string
 	HostInventory      string // 驼峰
 	Concurrency        int
-	LogLevel           string // 驼峰
 	DefaultSSHPort     int    // 驼峰
 	DefaultSSHUser     string // 驼峰
 	DefaultSSHPassword string // 驼峰
-	DefaultSSHTimeout int    // 驼峰
-	DefaultFetchPath  string
+	DefaultSSHTimeout  int    // 驼峰
+	DefaultFetchPath   string
+	HistoryEnabled     bool   // 执行历史日志开关
+	HistoryLog         string // 执行历史日志路径
 }
 
 var GlobalConfig *ConfigList
@@ -25,6 +26,7 @@ type Flags struct {
 	HostInventory []string
 	Debug         bool
 	Concurrency   int
+	NoHistory     bool // 本次执行不记录执行历史
 }
 
 var GlobalFlags = &Flags{
@@ -76,12 +78,24 @@ func ParseConfig(configFile string) (*ConfigList, error) {
 		ConfigAbsPath:      absPath,
 		HostInventory:      viper.GetString("host_inventory"),
 		Concurrency:        viper.GetInt("concurrency"),
-		LogLevel:           viper.GetString("log_level"),
 		DefaultSSHPort:     viper.GetInt("default_ssh_port"),
 		DefaultSSHUser:     viper.GetString("default_ssh_user"),
 		DefaultSSHPassword: viper.GetString("default_ssh_password"),
 		DefaultSSHTimeout:  viper.GetInt("default_ssh_timeout"),
 		DefaultFetchPath:   viper.GetString("default_fetch_path"),
+	}
+
+	// 执行历史日志开关：未配置时默认开启（viper.GetBool 对未设置项返回 false，需用 IsSet 判断）
+	if viper.IsSet("history_enabled") {
+		cfg.HistoryEnabled = viper.GetBool("history_enabled")
+	} else {
+		cfg.HistoryEnabled = true // 默认开启
+	}
+
+	// 执行历史日志路径：为空则自动跟随生效配置文件目录（如 /etc/fastdp/history.log）
+	cfg.HistoryLog = viper.GetString("history_log")
+	if cfg.HistoryLog == "" {
+		cfg.HistoryLog = filepath.Join(filepath.Dir(absPath), "history.log")
 	}
 
 	GlobalConfig = cfg

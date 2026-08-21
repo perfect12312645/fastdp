@@ -29,7 +29,7 @@ var pingCmd = &cobra.Command{
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod)
+		execute(hostSessions, config.GlobalFlags, mod, "ping")
 	},
 	Example: `
   fastdp ping web

@@ -1,20 +1,20 @@
 package cobra
 
 import (
+	"encoding/json"
 	"fastdp/module"
 	"fastdp/pkg/config"
-	. "fastdp/pkg/log"
 	. "fastdp/utils"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 	"os"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -56,19 +56,14 @@ var rootCmd = &cobra.Command{
 		// 读取全局参数
 		config.GlobalFlags.Concurrency, _ = cmd.Flags().GetInt("concurrency")
 		config.GlobalFlags.Debug, _ = cmd.Flags().GetBool("debug")
+		config.GlobalFlags.NoHistory, _ = cmd.Flags().GetBool("no-history")
 		inventoryPath, _ := cmd.Flags().GetString("inventory")
 		if inventoryPath != "" {
 			// 命令行传了，覆盖配置文件
 			config.GlobalConfig.HostInventory = inventoryPath
 		}
 
-		// 初始化日志
-		Logger = InitLogger(config.GlobalFlags.Debug)
-
-		Logger.Debug("初始化完成",
-			zap.Bool("debug", config.GlobalFlags.Debug),
-			zap.Int("concurrency", config.GlobalFlags.Concurrency),
-			zap.String("host文件", config.GlobalConfig.HostInventory))
+		Debugf("初始化完成 debug=%v concurrency=%d host文件=%s", config.GlobalFlags.Debug, config.GlobalFlags.Concurrency, config.GlobalConfig.HostInventory)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help() // 显式输出帮助信息
@@ -98,13 +93,10 @@ func init() {
 		concurrencyDefault = 10
 	}
 
-	var debug bool
-	if config.GlobalConfig.LogLevel == "debug" {
-		debug = true
-	}
 	// 全局标志
 	rootCmd.PersistentFlags().IntP("concurrency", "c", concurrencyDefault, "并发连接数")
-	rootCmd.PersistentFlags().BoolP("debug", "v", debug, "是否开启调试模式")
+	rootCmd.PersistentFlags().BoolP("debug", "v", false, "是否开启调试模式")
+	rootCmd.PersistentFlags().Bool("no-history", false, "本次执行不记录执行历史")
 	rootCmd.PersistentFlags().StringP("inventory", "i", "", "指定主机清单文件 (优先于配置文件)")
 	rootCmd.PersistentFlags().BoolP("version", "V", false, "显示版本信息")
 
@@ -129,8 +121,8 @@ func GetInfo() ([]*Host, error) {
 		return nil, fmt.Errorf("配置文件中未配置 host_inventory（主机清单路径），请先配置")
 	}
 
-	Logger.Sugar().Debugf("生效的配置文件路径: %s", config.GlobalConfig.ConfigAbsPath)
-	Logger.Sugar().Debugf("生效的机组文件路径: %s", hostInventory)
+	Debugf("生效的配置文件路径: %s", config.GlobalConfig.ConfigAbsPath)
+	Debugf("生效的机组文件路径: %s", hostInventory)
 	groups, err := ParseHostsFile(hostInventory)
 	if err != nil {
 		return nil, fmt.Errorf("解析host文件失败: %w", err)
@@ -140,7 +132,7 @@ func GetInfo() ([]*Host, error) {
 		return nil, fmt.Errorf("主机组为空，请配置host文件：%s", hostInventory)
 	}
 	for _, group := range groups {
-		Logger.Sugar().Debugf("主机组:%s", group.Name)
+		Debugf("主机组:%s", group.Name)
 	}
 
 	// 获取将要执行的主机组
@@ -151,15 +143,12 @@ func GetInfo() ([]*Host, error) {
 	execHosts := Filter(inventory, hosts)
 
 	// 打印调试日志
-	Logger.Debug("执行信息",
-		zap.Any("主机组", inventory),
-		zap.Any("主机列表", execHosts),
-		zap.Any("参数", config.GlobalFlags.Parameter),
-	)
+	Debugf("执行信息 主机组=%v 主机列表=%v 参数=%v", inventory, execHosts, config.GlobalFlags.Parameter)
 	return execHosts, nil
 }
 
-func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module) {
+func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module, modName string) {
+	start := time.Now()
 	// 使用并发执行命令
 	var wg sync.WaitGroup                     // 用于等待所有goroutine完成
 	var resultsMutex sync.Mutex               // 用于保护results的并发写入
@@ -197,9 +186,54 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module)
 	// 按照IP地址排序（字符串排序）
 	sort.Strings(addrs)
 
+	// 执行历史：每次执行写一条 JSON 元数据（不包含命令输出）
+	if config.GlobalConfig.HistoryEnabled && !config.GlobalFlags.NoHistory {
+		ok, failed, changed, unchanged := 0, 0, 0, 0
+		for _, r := range results {
+			if r.Success {
+				ok++
+				if r.Change {
+					changed++
+				} else {
+					unchanged++
+				}
+			} else {
+				failed++
+			}
+		}
+		hosts := make([]string, 0, len(hostSessions))
+		for _, hs := range hostSessions {
+			hosts = append(hosts, hs.Addr)
+		}
+		command := buildCommandDesc(modName, flags.Parameter)
+		WriteHistory(config.GlobalConfig.HistoryLog,
+			BuildHistoryEntry(command, hosts, ok, failed, changed, unchanged, time.Since(start)))
+	}
+
 	// 仅 check 命令触发表格美化，避免 script 模块同名脚本误匹配
 	if flags.Parameter["_check_module"] == "true" {
 		PolishOutput(addrs, results)
+		return
+	}
+
+	// 汇总模式：只显示失败主机详情，成功主机折叠为一行
+	isSummary := flags.Parameter["summary"] == "true"
+
+	if isSummary {
+		// 汇总模式输出
+		okCount := 0
+		for _, addr := range addrs {
+			result := results[addr]
+			if !result.Success {
+				Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
+					addr, result.Output, result.Error)
+			} else {
+				okCount++
+			}
+		}
+		if okCount > 0 {
+			fmt.Printf("\033[32m✅ %d/%d 成功\033[0m\n", okCount, len(addrs))
+		}
 		return
 	}
 
@@ -217,6 +251,22 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module)
 				addr, result.Output, result.Error)
 		}
 	}
+}
+
+// buildCommandDesc 拼接模块名与用户参数（跳过 _ 开头的内部键），如 "shell args=uptime"
+func buildCommandDesc(modName string, params map[string]string) string {
+	parts := make([]string, 0, len(params))
+	for k, v := range params {
+		if strings.HasPrefix(k, "_") {
+			continue
+		}
+		parts = append(parts, k+"="+v)
+	}
+	sort.Strings(parts)
+	if len(parts) == 0 {
+		return modName
+	}
+	return modName + " " + strings.Join(parts, " ")
 }
 
 func PolishOutput(addrs []string, results map[string]module.Result) {
@@ -379,6 +429,23 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 	case "html":
 		htmlContent := renderHTML(t)
 		fmt.Println(htmlContent)
+	case "json":
+		// JSON 输出：包含所有主机（成功主机含字段数据，失败主机含 _error）
+		jsonData := make(map[string]map[string]string)
+		for _, ip := range addrs {
+			res := results[ip]
+			if res.Success {
+				jsonData[ip] = hostDataCache[ip]
+			} else {
+				jsonData[ip] = map[string]string{"_error": res.Error}
+			}
+		}
+		jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
+		if err != nil {
+			Errorf("JSON 序列化失败: %v", err)
+			return
+		}
+		fmt.Println(string(jsonBytes))
 	default:
 		// 默认终端表格（圆角样式）
 		t.SetOutputMirror(os.Stdout)

@@ -3,7 +3,6 @@ package cobra
 import (
 	"fastdp/module"
 	"fastdp/pkg/config"
-	. "fastdp/pkg/log"
 	. "fastdp/utils"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -46,14 +45,14 @@ var copyCmd = &cobra.Command{
 			os.Exit(-3)
 		}
 		// 转换为Debug日志，使用%v格式化时间对象
-		Logger.Sugar().Debugf("copy模块，开始计算源文件md5: %v", time.Now())
+		Debugf("copy模块，开始计算源文件md5: %v", time.Now())
 		err = module.GetSource(config.GlobalFlags)
 		if err != nil {
 			Errorf("copy模块，获取源文件信息失败: %v", err)
 			os.Exit(1)
 		}
-		Logger.Sugar().Debugf("copy模块，计算源文件md5结束: %v", time.Now())
-		execute(hostSessions, config.GlobalFlags, mod)
+		Debugf("copy模块，计算源文件md5结束: %v", time.Now())
+		execute(hostSessions, config.GlobalFlags, mod, "copy")
 	},
 	Example: `  # 推送配置文件到 web 组
   fastdp copy -s app.conf -d /etc/ web

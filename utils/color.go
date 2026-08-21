@@ -1,6 +1,10 @@
 package utils
 
-import "fmt"
+import (
+	"fastdp/pkg/config"
+	"fmt"
+	"os"
+)
 
 const (
 	ColorReset     = "\033[0m"  // 重置颜色（必须在每个带颜色的输出后使用）
@@ -36,5 +40,12 @@ func Unchangedf(format string, v ...interface{}) {
 		fmt.Printf(ColorUnchanged+format+ColorReset+"\n", v...)
 	} else {
 		fmt.Printf(format+"\n", v...)
+	}
+}
+
+// Debugf 输出调试信息（仅 -v 开启时，输出到 stderr 避免污染 stdout 管道）
+func Debugf(format string, v ...interface{}) {
+	if config.GlobalFlags.Debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", v...)
 	}
 }

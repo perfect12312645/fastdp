@@ -13,11 +13,14 @@ default_ssh_user = "root"
 # 默认 SSH 连接超时（秒），不设置或者值为0代表永不超时
 default_ssh_timeout = 5
 
-# 日志级别：debug/info
-log_level = "info"
-
 # 全局默认密码（所有机器统一密码的情况）
 default_ssh_password = ""
 
 # 默认文件拉取存放位置
 default_fetch_path = "./fastdp-fetch"
+
+# 执行历史日志：记录每次执行的时间/用户/命令/目标主机/成败与改变计数/耗时（JSON 元数据，不存输出）
+history_enabled = true
+
+# 执行历史日志路径（空=自动跟随配置文件目录，默认 history.log）
+history_log = ""

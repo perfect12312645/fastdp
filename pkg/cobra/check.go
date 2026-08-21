@@ -53,9 +53,9 @@ var checkCmd = &cobra.Command{
 			return fmt.Errorf("参数冲突：-g（竖向输出）和 -f（导出格式）不能同时使用")
 		}
 		if format != "" {
-			validFormats := map[string]bool{"csv": true, "md": true, "html": true}
+			validFormats := map[string]bool{"csv": true, "md": true, "html": true, "json": true}
 			if !validFormats[format] {
-				return fmt.Errorf("无效格式：%s，合法值：csv|md|html", format)
+				return fmt.Errorf("无效格式：%s，合法值：csv|md|html|json", format)
 			}
 		}
 		return nil
@@ -88,7 +88,7 @@ var checkCmd = &cobra.Command{
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod)
+		execute(hostSessions, config.GlobalFlags, mod, "check")
 	},
 	Example: `
   # 对所有主机执行环境检查（默认表格输出）

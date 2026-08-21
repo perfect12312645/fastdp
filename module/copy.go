@@ -3,7 +3,6 @@ package module
 import (
 	"bytes"
 	"fastdp/pkg/config"
-	. "fastdp/pkg/log"
 	. "fastdp/utils"
 	"fmt"
 	"io"
@@ -58,7 +57,7 @@ func GetSource(flags *config.Flags) error {
 	dest := flags.Parameter["dest"]
 
 	if !filepath.IsAbs(dest) {
-		fmt.Errorf("目标文件位置必须输入绝对路径，当前输入为:%s", dest)
+		return fmt.Errorf("目标文件位置必须输入绝对路径，当前输入为:%s", dest)
 	}
 	srcAbs, err := filepath.Abs(src)
 	if err != nil {
@@ -71,7 +70,7 @@ func GetSource(flags *config.Flags) error {
 		}
 		return fmt.Errorf("获取源文件信息失败: %s", err.Error())
 	}
-	Logger.Sugar().Debugf("源文件名%s", srcf.Name())
+	Debugf("源文件名%s", srcf.Name())
 	if srcf.IsDir() {
 		return fmt.Errorf("不支持目录复制: %s", srcAbs)
 	}
@@ -115,7 +114,7 @@ else
   echo -n "FILE_NOT_FOUND"
 fi
 `, dest, flags.Parameter["srcFileName"], srcMd5)
-	Logger.Sugar().Debugf("copy模块 | 主机: %s | 开始计算目标文件MD5 | 时间: %v", hs.Addr, time.Now())
+	Debugf("copy模块 | 主机: %s | 开始计算目标文件MD5 | 时间: %v", hs.Addr, time.Now())
 	var checkOut, checkErr bytes.Buffer
 	hs.Session.Stdout = &checkOut
 	hs.Session.Stderr = &checkErr
@@ -131,9 +130,9 @@ fi
 
 	destContent := checkOut.String()
 	destContentTrimmed := strings.TrimSpace(destContent)
-	Logger.Sugar().Debugf("copy模块 | 主机: %s | 远程文件状态返回: %s", hs.Addr, destContentTrimmed)
+	Debugf("copy模块 | 主机: %s | 远程文件状态返回: %s", hs.Addr, destContentTrimmed)
 	changed := false
-	Logger.Sugar().Debugf("copy模块 | 主机: %s | 完成计算目标文件MD5 | 时间: %v", hs.Addr, time.Now())
+	Debugf("copy模块 | 主机: %s | 完成计算目标文件MD5 | 时间: %v", hs.Addr, time.Now())
 
 	if destContentTrimmed == "FILE_NOT_FOUND" || destContentTrimmed == "DIFFER" {
 		changed = true
@@ -152,7 +151,7 @@ tmpFile="$target_dir/fastdp_copy_$(date +%%s%%N)"
 mkdir -p "$target_dir"
 cat > "$tmpFile" && chmod %s "$tmpFile" && mv "$tmpFile" "$target_path"
 `, dest, flags.Parameter["srcFileName"], permissionStr)
-		Logger.Sugar().Debugf("copy模块 | 主机: %s | 开始传输文件 | 源: %s | 目标: %s", hs.Addr, srcAbs, dest)
+		Debugf("copy模块 | 主机: %s | 开始传输文件 | 源: %s | 目标: %s", hs.Addr, srcAbs, dest)
 
 		// 打开源文件
 		srcFile, err := os.Open(srcAbs)
@@ -185,7 +184,7 @@ cat > "$tmpFile" && chmod %s "$tmpFile" && mv "$tmpFile" "$target_path"
 			// 1. 距离上次打印已超过3秒；2. 文件传输完成（current == total）
 			if now.Sub(progressReader.lastPrintTime) >= 3*time.Second || current == total {
 				percent := float64(current) / float64(total) * 100
-				Logger.Sugar().Infof("复制进度 | 主机: %s | 已传输: %.2f%% (%d/%d bytes)",
+				fmt.Printf("复制进度 | 主机: %s | 已传输: %.2f%% (%d/%d bytes)\n",
 					host, percent, current, total)
 				progressReader.lastPrintTime = now // 更新上次打印时间
 			}
@@ -236,7 +235,7 @@ cat > "$tmpFile" && chmod %s "$tmpFile" && mv "$tmpFile" "$target_path"
 		}
 		stdin.Close()
 
-		Logger.Sugar().Debugf("copy模块 | 主机: %s | 完成文件传输写入 | 等待远程处理结果", hs.Addr)
+		Debugf("copy模块 | 主机: %s | 完成文件传输写入 | 等待远程处理结果", hs.Addr)
 		if err := session.Wait(); err != nil {
 			return Result{
 				Success: false,

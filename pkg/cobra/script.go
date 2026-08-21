@@ -50,15 +50,31 @@ var scriptCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		// 处理主机组参数（如 web/all）
+		// 处理主机组参数（如 web/all，支持区间展开）
 		config.GlobalFlags.HostInventory = args
 		scriptPath, _ := cmd.Flags().GetString("file")
 		config.GlobalFlags.Parameter["script_file"] = scriptPath
+		summary, _ := cmd.Flags().GetBool("summary")
+		if summary {
+			config.GlobalFlags.Parameter["summary"] = "true"
+		}
 
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
 			os.Exit(-2)
+		}
+
+		// 脚本内容安全检查：硬拦截 / 确认
+		content, err := os.ReadFile(scriptPath)
+		if err != nil {
+			Errorf("读取脚本失败: %v", err)
+			os.Exit(1)
+		}
+		yes, _ := cmd.Flags().GetBool("yes")
+		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
+		if !enforceCommandSafety(string(content), execHosts, yes, allowDangerous) {
+			os.Exit(1)
 		}
 
 		hostSessions := SshConnect(execHosts)
@@ -67,7 +83,7 @@ var scriptCmd = &cobra.Command{
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod)
+		execute(hostSessions, config.GlobalFlags, mod, "script")
 	},
 	Example: `
   # 上传本地脚本并在所有主机执行
@@ -84,4 +100,7 @@ var scriptCmd = &cobra.Command{
 func init() {
 	scriptCmd.Flags().StringP("file", "f", "", "本地脚本路径 (必需)")
 	_ = scriptCmd.MarkFlagRequired("file")
+	scriptCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
+	scriptCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")
+	scriptCmd.Flags().BoolP("summary", "s", false, "汇总模式：只显示失败主机，成功主机折叠为一行")
 }

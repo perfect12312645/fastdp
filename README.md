@@ -288,6 +288,8 @@ fastdp -i ./host shell -a "df -h" gpu
 
 参数：
 - `-a` / `--args`：要执行的 shell 命令（必需）
+- `-y` / `--yes`：危险命令自动确认（CI 场景）
+- `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
 
 ```bash
 # 基础用法
@@ -303,6 +305,25 @@ fastdp shell -a "echo hello world" all
 # 高阶用法：批量输出 IP + 主机名
 fastdp shell -a 'echo $(hostname -I|awk '\''{print $1}'\'') $(hostname)' all | grep -v 'output:'
 ```
+
+#### 命令安全检查
+
+执行前自动扫描命令，分两级防护（与区间展开联动，展示目标机器清单）：
+
+| 等级 | 行为 | 示例 |
+|------|------|------|
+| 硬拦截（纯破坏性） | 直接禁止执行，需 `--allow-dangerous` 显式放行 | `rm -rf /`、`rm -rf /*`、fork 炸弹、`dd ... of=/dev/sdX`、`> /dev/sdX`、根级 `chmod -R 777 /`、`kill -9 1` |
+| 需确认（有合法场景） | 交互确认 `[y/N]` 后执行，`--yes` 跳过 | `rm -rf /tmp/*`、`shutdown`/`reboot`/`poweroff`、`init 0\|6` |
+
+```bash
+# 危险命令默认交互确认
+fastdp shell -a 'rm -rf /tmp/*' master
+
+# CI 场景自动确认
+fastdp shell -a 'rm -rf /tmp/*' master --yes
+```
+
+每次执行都会记录一条 JSON 执行历史（时间/用户/命令/目标主机/成败与改变计数/耗时）到执行历史日志，默认随配置文件目录（history.log），可用 history_log 配置路径。script 模块同样会扫描本地脚本内容。--no-history 参数可跳过单次记录。
 
 ![image-20260529175910671](./assets/shell.png)
 
@@ -359,6 +380,10 @@ fastdp fetch -r "/tmp/*.log" --no-ip-dir all
 
 参数：
 - `-f` / `--file`：本地脚本路径（必需，文本文件，最大 512KB）
+- `-y` / `--yes`：危险命令自动确认（CI 场景）
+- `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
+
+> script 模块执行前会扫描脚本内容，危险命令（如 `rm -rf /`）会触发与 shell 模块相同的安全拦截/确认机制。
 
 ```bash
 # 上传脚本并在所有主机执行
@@ -385,7 +410,7 @@ fastdp ping all
 
 参数：
 - `-g`：竖向格式化输出（类似 mysql \G）
-- `-f`：导出格式，支持 csv / md / html
+- `-f`：导出格式，支持 csv / md / html / json
 
 固定输出字段（18+ 标准字段，支持自定义字段）：
 
@@ -399,7 +424,7 @@ fastdp ping all
 | cpu_model | CPU 型号 |
 | arch | 架构 |
 | mem | 内存 |
-| net | 网卡 |
+| net | 网卡（含速率） |
 | gateway | 网关 |
 | disk | 磁盘 |
 | firewall | 防火墙 |
@@ -421,6 +446,7 @@ fastdp check all -g
 fastdp check all -f csv  > report.csv
 fastdp check all -f md   > report.md
 fastdp check all -f html > report.html
+fastdp check all -f json > report.json
 ```
 
 **自定义字段**：编辑巡检脚本（`~/.fastdp/fastdp-check.sh` 或 `/etc/fastdp/fastdp-check.sh`），在末尾追加 `key=value` 格式即可自动识别展示：
@@ -476,14 +502,17 @@ default_ssh_user = "root"
 # 默认 SSH 连接超时（秒），不设置或者值为0代表永不超时
 default_ssh_timeout = 5
 
-# 日志级别：debug/info
-log_level = "info"
-
 # 全局默认密码（所有机器统一密码的情况）
 default_ssh_password = ""
 
 # 默认文件拉取存放位置
 default_fetch_path = "./fastdp-fetch"
+
+# 执行历史日志开关（默认开启）
+history_enabled = true
+
+# 执行历史日志路径（空=自动跟随配置文件目录，默认 history.log）
+history_log = ""
 ```
 
 ## 主机组配置
@@ -495,6 +524,14 @@ default_fetch_path = "./fastdp-fetch"
 ```ini
 [组名]
 主机地址 [参数=值 ...]
+```
+
+主机地址支持 `[start:end:step]` 区间展开（零填充自动识别）：
+
+```ini
+[master]
+node-[100:105] user=root port=22    # 等价于逐行写 node-100 ~ node-105
+node-103 password=special           # 例外主机：单独一行覆盖参数（后声明优先）
 ```
 
 ### 支持的参数
@@ -529,9 +566,23 @@ default_fetch_path = "./fastdp-fetch"
 | ------------- | ---- | ---------------------------------- | ------ |
 | --concurrency | -c   | 并发连接数                         | 15     |
 | --debug       | -v   | 开启调试模式                       | false  |
+| --no-history  | -    | 本次执行不记录执行历史             | false  |
 | --inventory   | -i   | 指定主机清单文件（优先于配置文件） | ""     |
 | --version     | -V   | 显示版本信息                       | false  |
 | --help        | -h   | 查看帮助信息                       | -      |
+
+## 主机区间展开（所有模块通用）
+
+目标主机/组参数支持 `[start:end:step]` 区间表达式，shell/copy/fetch/script/ping/check 均可用：
+
+```bash
+fastdp shell -a 'uptime' 'node-[100:105]'      # → node-100 ~ node-105
+fastdp copy -s a.conf -d /tmp/ 'node-[100:102]'
+```
+
+> **引号说明**：`[...]` 是 shell 的 glob 语法，**必须加引号**——bash 下若当前目录恰好有同名文件会被静默替换成错误值，zsh 下直接报 `no matches found`。host 文件中使用则无需引号。
+
+> 区间展开的详细语法（步长、零填充、参数覆盖）见 `host` 模板文件注释与[主机组配置](#主机组配置)章节。
 
 ## 注意事项
 

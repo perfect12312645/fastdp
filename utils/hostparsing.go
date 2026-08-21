@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -82,11 +83,22 @@ func ParseHostsFile(path string) ([]*HostGroup, error) {
 			}
 		}
 
-		// 添加到当前组
-		currentGroup.Hosts = append(currentGroup.Hosts, &Host{
-			Address: hostAddress,
-			Params:  hostParams,
-		})
+		// 支持主机区间展开：node-[100:105] → node-100 ~ node-105
+		expandedAddrs, hasRange := ExpandHostRange(hostAddress)
+		if hasRange {
+			for _, addr := range expandedAddrs {
+				currentGroup.Hosts = append(currentGroup.Hosts, &Host{
+					Address: addr,
+					Params:  copyHostParams(hostParams),
+				})
+			}
+		} else {
+			// 添加到当前组
+			currentGroup.Hosts = append(currentGroup.Hosts, &Host{
+				Address: hostAddress,
+				Params:  hostParams,
+			})
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -116,7 +128,10 @@ func Inventory(Args []string, groups []*HostGroup) ([]*HostGroup, []*Host, error
 	var hosts []*Host
 	hasAll := false
 
-	for _, arg := range Args {
+	// 参数支持区间展开：node-[100:105] / 192.168.10.[100:101]
+	args := ExpandHostRanges(Args)
+
+	for _, arg := range args {
 		if arg == "all" {
 			hasAll = true
 			break // 遇到 "all" 无需继续检查其他参数
@@ -162,16 +177,135 @@ func Filter(groups []*HostGroup, hosts []*Host) []*Host {
 	return allHosts
 }
 
+// deduplicateHosts 去重，后者覆盖前者：
+// 区间展开（node-[100:105] password=a）后，可单独一行声明例外主机覆盖参数
+// （node-103 password=b），后声明优先
 func deduplicateHosts(hosts []*Host) []*Host {
-	seen := make(map[string]bool)
-	var result []*Host
-
+	result := make([]*Host, 0, len(hosts))
+	index := make(map[string]int)
 	for _, host := range hosts {
-		if host != nil && !seen[host.Address] {
-			seen[host.Address] = true
+		if host == nil {
+			continue
+		}
+		if i, ok := index[host.Address]; ok {
+			result[i] = host
+		} else {
+			index[host.Address] = len(result)
 			result = append(result, host)
 		}
 	}
-
 	return result
+}
+
+// hostRangeRegex 匹配 [start:end:step] 区间表达式，仅支持数字
+// 示例: [100:105] [100:105:2] [01:04]
+var hostRangeRegex = regexp.MustCompile(`\[(\d+):(\d+)(?::(\d+))?\]`)
+
+// maxRangeExpand 单个区间的最大展开数量（防止误输入造成爆炸性展开）
+const maxRangeExpand = 10000
+
+// ExpandHostRanges 展开参数列表中的区间表达式，如:
+//
+//	fastdp shell -a 'uptime' 'node-[100:105]'   → node-100 node-101 ... node-105
+//	fastdp shell -a 'uptime' '192.168.10.[100:101]' → 192.168.10.100 192.168.10.101
+//	fastdp shell -a 'uptime' 'node-[01:04]'        → node-01 node-02 node-03 node-04
+//
+// 不含区间的参数原样返回。
+func ExpandHostRanges(args []string) []string {
+	var result []string
+	for _, arg := range args {
+		expanded, ok := ExpandHostRange(arg)
+		if ok {
+			result = append(result, expanded...)
+		} else {
+			result = append(result, arg)
+		}
+	}
+	return result
+}
+
+// ExpandHostRange 展开单个参数中的区间表达式。
+// 支持一个参数内多个区间（按笛卡尔积展开），如 node-[1:2]-[3:4]。
+// 返回值: (展开后的主机列表, 是否包含区间表达式)
+func ExpandHostRange(arg string) ([]string, bool) {
+	matches := hostRangeRegex.FindAllStringSubmatchIndex(arg, -1)
+	if len(matches) == 0 {
+		return nil, false
+	}
+
+	// 解析每个区间的展开值
+	values := make([][]string, 0, len(matches))
+	for _, m := range matches {
+		stepStr := "1"
+		if m[6] >= 0 {
+			stepStr = arg[m[6]:m[7]]
+		}
+		vs, ok := expandRangeValues(arg[m[2]:m[3]], arg[m[4]:m[5]], stepStr)
+		if !ok {
+			// 非法区间（如 [105:100] 或 [1:5:0]），按字面量处理
+			return []string{arg}, true
+		}
+		values = append(values, vs)
+	}
+
+	// 按区间在原串中的位置做笛卡尔积替换
+	var result []string
+	var build func(pos int, acc string)
+	build = func(pos int, acc string) {
+		if pos == len(matches) {
+			result = append(result, acc+arg[matches[len(matches)-1][1]:])
+			return
+		}
+		segStart := 0
+		if pos > 0 {
+			segStart = matches[pos-1][1]
+		}
+		seg := arg[segStart:matches[pos][0]]
+		for _, v := range values[pos] {
+			build(pos+1, acc+seg+v)
+		}
+	}
+	build(0, "")
+	return result, true
+}
+
+// expandRangeValues 解析 [start:end:step] 的展开值列表。
+// 零填充：起始值带前导零时按起始值宽度填充（01 → 01,02,...）。
+// 非法区间（start>end 或 step<=0）返回 ok=false。
+func expandRangeValues(startStr, endStr, stepStr string) ([]string, bool) {
+	start, err1 := strconv.Atoi(startStr)
+	end, err2 := strconv.Atoi(endStr)
+	step, err3 := strconv.Atoi(stepStr)
+	if err1 != nil || err2 != nil || err3 != nil || step <= 0 || end < start {
+		return nil, false
+	}
+
+	width := 0
+	if len(startStr) > 1 && startStr[0] == '0' {
+		width = len(startStr)
+	}
+
+	count := (end-start)/step + 1
+	if count > maxRangeExpand {
+		count = maxRangeExpand
+	}
+	vs := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		v := start + i*step
+		if width > 0 {
+			vs = append(vs, fmt.Sprintf("%0*d", width, v))
+		} else {
+			vs = append(vs, strconv.Itoa(v))
+		}
+	}
+	return vs, true
+}
+
+// copyHostParams 深拷贝主机参数表
+func copyHostParams(params map[string]string) map[string]string {
+	cp := make(map[string]string, len(params))
+	for k, v := range params {
+		cp[k] = v
+	}
+	return cp
 }

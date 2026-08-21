@@ -47,7 +47,7 @@ var fetchCmd = &cobra.Command{
 			os.Exit(-3)
 		}
 
-		execute(hostSessions, config.GlobalFlags, mod)
+		execute(hostSessions, config.GlobalFlags, mod, "fetch")
 	},
 	Example: `
   # 批量拉取所有主机 /tmp/sec* 文件
