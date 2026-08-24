@@ -285,7 +285,7 @@ func execute(hostSessions []HostSession, failedHosts map[string]string, flags *c
 		return
 	}
 
-	outputResults(addrs, results, flags)
+	outputResults(addrs, results)
 	writeRetryFile(flags, results, addrs)
 }
 
@@ -313,7 +313,7 @@ func runWithTimeout(mod module.Module, hs HostSession, flags *config.Flags, time
 	}
 }
 
-func outputResults(addrs []string, results map[string]module.Result, flags *config.Flags) {
+func outputResults(addrs []string, results map[string]module.Result) {
 	var successAddrs, failedAddrs []string
 	for _, addr := range addrs {
 		if results[addr].Success {
