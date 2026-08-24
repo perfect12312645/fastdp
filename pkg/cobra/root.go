@@ -57,13 +57,18 @@ var rootCmd = &cobra.Command{
 		config.GlobalFlags.Concurrency, _ = cmd.Flags().GetInt("concurrency")
 		config.GlobalFlags.Debug, _ = cmd.Flags().GetBool("debug")
 		config.GlobalFlags.NoHistory, _ = cmd.Flags().GetBool("no-history")
+		config.GlobalFlags.Timeout, _ = cmd.Flags().GetInt("timeout")
+		config.GlobalFlags.RetryFile, _ = cmd.Flags().GetString("retry-file")
+		config.GlobalFlags.Limit, _ = cmd.Flags().GetString("limit")
 		inventoryPath, _ := cmd.Flags().GetString("inventory")
 		if inventoryPath != "" {
 			// 命令行传了，覆盖配置文件
 			config.GlobalConfig.HostInventory = inventoryPath
 		}
 
-		Debugf("初始化完成 debug=%v concurrency=%d host文件=%s", config.GlobalFlags.Debug, config.GlobalFlags.Concurrency, config.GlobalConfig.HostInventory)
+		Debugf("初始化完成 debug=%v concurrency=%d timeout=%v retry-file=%s limit=%s host文件=%s",
+			config.GlobalFlags.Debug, config.GlobalFlags.Concurrency, config.GlobalFlags.Timeout,
+			config.GlobalFlags.RetryFile, config.GlobalFlags.Limit, config.GlobalConfig.HostInventory)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help() // 显式输出帮助信息
@@ -87,10 +92,10 @@ func init() {
 		os.Exit(1)
 	}
 
-	// 并发数兜底：配置文件为空/0 → 强制使用默认值 10
+	// 并发数兜底：配置文件为空/0 → 强制使用默认值 50
 	concurrencyDefault := config.GlobalConfig.Concurrency
 	if concurrencyDefault <= 0 {
-		concurrencyDefault = 10
+		concurrencyDefault = 50
 	}
 
 	// 全局标志
@@ -99,6 +104,9 @@ func init() {
 	rootCmd.PersistentFlags().Bool("no-history", false, "本次执行不记录执行历史")
 	rootCmd.PersistentFlags().StringP("inventory", "i", "", "指定主机清单文件 (优先于配置文件)")
 	rootCmd.PersistentFlags().BoolP("version", "V", false, "显示版本信息")
+	rootCmd.PersistentFlags().IntP("timeout", "t", 0, "单台执行超时（秒，0=不限制）")
+	rootCmd.PersistentFlags().String("retry-file", "", "失败主机列表输出文件路径 (如 /tmp/failed.txt)")
+	rootCmd.PersistentFlags().String("limit", "", "从文件读取目标主机列表 (如 --limit @/tmp/failed.txt)")
 
 	// 添加子命令
 	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd)
@@ -142,20 +150,59 @@ func GetInfo() ([]*Host, error) {
 	}
 	execHosts := Filter(inventory, hosts)
 
+	if config.GlobalFlags.Limit != "" {
+		execHosts = applyLimit(execHosts, strings.TrimPrefix(config.GlobalFlags.Limit, "@"))
+	}
+
 	// 打印调试日志
 	Debugf("执行信息 主机组=%v 主机列表=%v 参数=%v", inventory, execHosts, config.GlobalFlags.Parameter)
 	return execHosts, nil
 }
 
-func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module, modName string) {
+func applyLimit(hosts []*Host, limitPath string) []*Host {
+	data, err := os.ReadFile(limitPath)
+	if err != nil {
+		Errorf("读取 limit 文件失败: %v", err)
+		return hosts
+	}
+	whitelistSet := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			whitelistSet[line] = true
+		}
+	}
+	if len(whitelistSet) == 0 {
+		return hosts
+	}
+	var filtered []*Host
+	for _, h := range hosts {
+		if whitelistSet[h.Address] {
+			filtered = append(filtered, h)
+		}
+	}
+	return filtered
+}
+
+func execute(hostSessions []HostSession, failedHosts map[string]string, flags *config.Flags, mod module.Module, modName string) {
 	start := time.Now()
 	// 使用并发执行命令
 	var wg sync.WaitGroup                     // 用于等待所有goroutine完成
 	var resultsMutex sync.Mutex               // 用于保护results的并发写入
 	results := make(map[string]module.Result) // 存储每个主机的执行结果（key:主机地址，value:命令输出）
+	// 将连接失败的主机合并到 results
+	for addr, errMsg := range failedHosts {
+		results[addr] = module.Result{
+			Success: false,
+			Output:  "",
+			Error:   errMsg,
+			Change:  false,
+		}
+	}
 	// 创建有缓冲的channel来控制最大并发数
 	maxConcurrency := config.GlobalFlags.Concurrency
 	semaphore := make(chan struct{}, maxConcurrency)
+	timeout := time.Duration(config.GlobalFlags.Timeout) * time.Second
 	for _, hs := range hostSessions {
 		wg.Add(1) // 每启动一个goroutine，WaitGroup计数器+1
 		// 启动goroutine，传入当前的hs（主机会话）
@@ -167,7 +214,7 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module,
 			// 控制并发数量
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			result := mod.Run(hs, flags)
+			result := runWithTimeout(mod, hs, flags, timeout)
 
 			// 写入结果到共享map（需要加锁保护）
 			resultsMutex.Lock()       // 加锁：独占访问results
@@ -234,23 +281,92 @@ func execute(hostSessions []HostSession, flags *config.Flags, mod module.Module,
 		if okCount > 0 {
 			fmt.Printf("\033[32m✅ %d/%d 成功\033[0m\n", okCount, len(addrs))
 		}
+		writeRetryFile(flags, results, addrs)
 		return
 	}
 
-	// 输出
+	outputResults(addrs, results, flags)
+	writeRetryFile(flags, results, addrs)
+}
+
+func runWithTimeout(mod module.Module, hs HostSession, flags *config.Flags, timeout time.Duration) module.Result {
+	if timeout <= 0 {
+		return mod.Run(hs, flags)
+	}
+	ch := make(chan module.Result, 1)
+	go func() {
+		ch <- mod.Run(hs, flags)
+	}()
+	select {
+	case r := <-ch:
+		return r
+	case <-time.After(timeout):
+		// 关闭会话发送 SSH channel close，远程命令会收到 SIGHUP
+		hs.Session.Close()
+		hs.Client.Close()
+		return module.Result{
+			Success: false,
+			Output:  "",
+			Error:   fmt.Sprintf("执行超时（%v）", timeout),
+			Change:  false,
+		}
+	}
+}
+
+func outputResults(addrs []string, results map[string]module.Result, flags *config.Flags) {
+	var successAddrs, failedAddrs []string
 	for _, addr := range addrs {
-		result := results[addr]
-		if result.Success {
-			if result.Change {
-				Changedf("host:%s 执行成功 output:\n%s", addr, result.Output)
-			} else {
-				Unchangedf("host:%s 执行成功 output:\n%s", addr, result.Output)
-			}
+		if results[addr].Success {
+			successAddrs = append(successAddrs, addr)
 		} else {
+			failedAddrs = append(failedAddrs, addr)
+		}
+	}
+
+	for _, addr := range successAddrs {
+		result := results[addr]
+		if result.Change {
+			Changedf("host:%s 执行成功 output:\n%s", addr, result.Output)
+		} else {
+			Unchangedf("host:%s 执行成功 output:\n%s", addr, result.Output)
+		}
+	}
+
+	if len(failedAddrs) > 0 {
+		fmt.Printf("─────────────────── ❌ 失败主机（%d/%d） ───────────────────\n", len(failedAddrs), len(addrs))
+		for _, addr := range failedAddrs {
+			result := results[addr]
 			Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
 				addr, result.Output, result.Error)
 		}
 	}
+
+	fmt.Printf("\033[32m✅ %d/%d 成功\033[0m", len(successAddrs), len(addrs))
+	if len(failedAddrs) > 0 {
+		fmt.Printf("  \033[31m❌ %d/%d 失败\033[0m", len(failedAddrs), len(addrs))
+	}
+	fmt.Println()
+}
+
+func writeRetryFile(flags *config.Flags, results map[string]module.Result, addrs []string) {
+	if flags.RetryFile == "" {
+		return
+	}
+	var failedAddrs []string
+	for _, addr := range addrs {
+		if !results[addr].Success {
+			failedAddrs = append(failedAddrs, addr)
+		}
+	}
+	if len(failedAddrs) == 0 {
+		return
+	}
+	content := strings.Join(failedAddrs, "\n") + "\n"
+	if err := os.WriteFile(flags.RetryFile, []byte(content), 0644); err != nil {
+		Errorf("写入失败主机列表失败: %v", err)
+		return
+	}
+	Debugf("失败主机列表已写入: %s (%d 台)", flags.RetryFile, len(failedAddrs))
 }
 
 // buildCommandDesc 拼接模块名与用户参数（跳过 _ 开头的内部键），如 "shell args=uptime"

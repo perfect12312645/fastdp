@@ -26,7 +26,10 @@ type Flags struct {
 	HostInventory []string
 	Debug         bool
 	Concurrency   int
-	NoHistory     bool // 本次执行不记录执行历史
+	NoHistory     bool   // 本次执行不记录执行历史
+	Timeout       int    // 单台执行超时（秒，0=不限制）
+	RetryFile     string // 失败主机列表输出文件路径（空=不输出）
+	Limit         string // 目标主机限制（@file 或 主机列表）
 }
 
 var GlobalFlags = &Flags{

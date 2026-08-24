@@ -82,13 +82,13 @@ var checkCmd = &cobra.Command{
 			os.Exit(-2)
 		}
 
-		hostSessions := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("script") // ✅ 直接复用 script 模块
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod, "check")
+		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "check")
 	},
 	Example: `
   # 对所有主机执行环境检查（默认表格输出）

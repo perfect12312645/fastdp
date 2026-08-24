@@ -41,13 +41,13 @@ var shellCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		hostSessions := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("shell")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod, "shell")
+		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "shell")
 	},
 	Example: `
   # 基础用法：单组执行命令

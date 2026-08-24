@@ -77,13 +77,13 @@ var scriptCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		hostSessions := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("script")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod, "script")
+		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "script")
 	},
 	Example: `
   # 上传本地脚本并在所有主机执行

@@ -38,7 +38,7 @@ var copyCmd = &cobra.Command{
 			Errorf("获取配置信息失败: %v", err)
 			os.Exit(-2)
 		}
-		hostSessions := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("copy")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
@@ -52,7 +52,7 @@ var copyCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		Debugf("copy模块，计算源文件md5结束: %v", time.Now())
-		execute(hostSessions, config.GlobalFlags, mod, "copy")
+		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "copy")
 	},
 	Example: `  # 推送配置文件到 web 组
   fastdp copy -s app.conf -d /etc/ web

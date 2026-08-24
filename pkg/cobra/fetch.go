@@ -40,14 +40,14 @@ var fetchCmd = &cobra.Command{
 			os.Exit(-2)
 		}
 
-		hostSessions := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("fetch")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
 
-		execute(hostSessions, config.GlobalFlags, mod, "fetch")
+		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "fetch")
 	},
 	Example: `
   # 批量拉取所有主机 /tmp/sec* 文件

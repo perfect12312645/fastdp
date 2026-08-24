@@ -490,8 +490,10 @@ open report.csv
 # 主机清单路径
 host_inventory = "/etc/fastdp/host"
 
-# 默认并发数
-concurrency = 15
+# 默认并发数（协程数），即客户端同时连接服务端的数量
+# 并发较高时瓶颈通常在客户端：fd 上限（ulimit -n）和本地端口范围
+# 建议：ulimit -n 4096 + sysctl net.ipv4.ip_local_port_range="1024 65535"
+concurrency = 50
 
 # 默认 SSH 端口
 default_ssh_port = 22
@@ -564,7 +566,7 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 
 | 参数          | 缩写 | 说明                               | 默认值 |
 | ------------- | ---- | ---------------------------------- | ------ |
-| --concurrency | -c   | 并发连接数                         | 15     |
+| --concurrency | -c   | 并发连接数（客户端同时连接服务端的数量） | 50     |
 | --debug       | -v   | 开启调试模式                       | false  |
 | --no-history  | -    | 本次执行不记录执行历史             | false  |
 | --inventory   | -i   | 指定主机清单文件（优先于配置文件） | ""     |

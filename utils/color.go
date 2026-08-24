@@ -4,6 +4,8 @@ import (
 	"fastdp/pkg/config"
 	"fmt"
 	"os"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -13,12 +15,14 @@ const (
 	ColorUnchanged = "\033[33m" // 黄色：表示无变更（如文件未修改、服务已运行）
 )
 
-// 控制是否启用颜色（默认启用，可在不支持颜色的终端中关闭）
-var UseColors = true
+// isTerminal 检测 stdout 是否为终端（管道/重定向时返回 false，自动禁用颜色）
+func isTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
 
-// Errorf 打印红色错误信息（
+// Errorf 打印红色错误信息
 func Errorf(format string, v ...interface{}) {
-	if UseColors {
+	if isTerminal() {
 		fmt.Printf(ColorError+format+ColorReset+"\n", v...)
 	} else {
 		fmt.Printf(format+"\n", v...)
@@ -27,7 +31,7 @@ func Errorf(format string, v ...interface{}) {
 
 // Changedf 打印绿色变更信息
 func Changedf(format string, v ...interface{}) {
-	if UseColors {
+	if isTerminal() {
 		fmt.Printf(ColorChanged+format+ColorReset+"\n", v...)
 	} else {
 		fmt.Printf(format+"\n", v...)
@@ -36,7 +40,7 @@ func Changedf(format string, v ...interface{}) {
 
 // Unchangedf 打印黄色无变更信息
 func Unchangedf(format string, v ...interface{}) {
-	if UseColors {
+	if isTerminal() {
 		fmt.Printf(ColorUnchanged+format+ColorReset+"\n", v...)
 	} else {
 		fmt.Printf(format+"\n", v...)

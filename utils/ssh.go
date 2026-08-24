@@ -18,11 +18,12 @@ type HostSession struct {
 	Addr    string       // 主机地址（如 "192.168.1.1:22"）
 }
 
-func SshConnect(allHosts []*Host) []HostSession {
+func SshConnect(allHosts []*Host) ([]HostSession, map[string]string) {
 	var (
 		wg           sync.WaitGroup
 		mu           sync.Mutex
 		hostSessions []HostSession
+		failedHosts  = make(map[string]string)
 	)
 
 	for _, host := range allHosts {
@@ -65,7 +66,7 @@ func SshConnect(allHosts []*Host) []HostSession {
 				keyAuth, err := publicKeyAuth()
 				if err != nil {
 					mu.Lock()
-					Errorf("主机 %s 公钥认证失败: %v", h.Address, err)
+					failedHosts[h.Address] = err.Error()
 					mu.Unlock()
 					return
 				}
@@ -81,7 +82,7 @@ func SshConnect(allHosts []*Host) []HostSession {
 			client, err := ssh.Dial("tcp", h.Address+":"+port, sshConfig)
 			if err != nil {
 				mu.Lock()
-				Errorf("连接 %s 失败: %v", h.Address, err)
+				failedHosts[h.Address] = err.Error()
 				mu.Unlock()
 				return
 			}
@@ -89,7 +90,7 @@ func SshConnect(allHosts []*Host) []HostSession {
 			session, err := client.NewSession()
 			if err != nil {
 				mu.Lock()
-				Errorf("为 %s 创建会话失败: %v", h.Address, err)
+				failedHosts[h.Address] = err.Error()
 				mu.Unlock()
 				client.Close()
 				return
@@ -107,7 +108,7 @@ func SshConnect(allHosts []*Host) []HostSession {
 	}
 
 	wg.Wait() // 等待所有goroutine完成
-	return hostSessions
+	return hostSessions, failedHosts
 }
 
 // publicKeyAuth 生成基于默认私钥文件的认证方法

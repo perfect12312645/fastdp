@@ -23,13 +23,13 @@ var pingCmd = &cobra.Command{
 			Errorf("获取配置信息失败: %v", err)
 			os.Exit(-2)
 		}
-		hostSessions := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("ping")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
 			os.Exit(-3)
 		}
-		execute(hostSessions, config.GlobalFlags, mod, "ping")
+		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "ping")
 	},
 	Example: `
   fastdp ping web
