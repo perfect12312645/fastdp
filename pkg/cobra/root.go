@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	"fastdp/module"
 	"fastdp/pkg/config"
+	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/jedib0t/go-pretty/v6/text"
-	"github.com/spf13/cobra"
 	"os"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -22,8 +24,10 @@ var (
 )
 var rootCmd = &cobra.Command{
 	Use:   "fastdp",
-	Short: "轻量级 Ansible 风格运维工具",
-	Long:  `在指定主机组上执行运维操作，支持多模块管理。`,
+	Short: "轻量级批量运维工具（Ansible 风格，单二进制无依赖）",
+	Long: `fastdp 在指定主机组上批量执行运维操作。特点：单二进制无依赖、Go 协程并发、SSH 协议。
+支持模块：shell（执行命令）、copy（文件传输）、fetch（远程拉取）、script（批量脚本）、ping（连通性）、check（环境巡检）。
+主机组通过配置文件中的 host_inventory 指定，支持 [N:M:step] 区间展开。`,
 	Example: `
   # 在 web 组执行命令
   fastdp shell -a "uptime" web
@@ -60,6 +64,9 @@ var rootCmd = &cobra.Command{
 		config.GlobalFlags.Timeout, _ = cmd.Flags().GetInt("timeout")
 		config.GlobalFlags.RetryFile, _ = cmd.Flags().GetString("retry-file")
 		config.GlobalFlags.Limit, _ = cmd.Flags().GetString("limit")
+		config.GlobalFlags.Output, _ = cmd.Flags().GetString("output")
+		config.GlobalFlags.Quiet, _ = cmd.Flags().GetBool("quiet")
+		config.GlobalFlags.DryRun, _ = cmd.Flags().GetBool("dry-run")
 		inventoryPath, _ := cmd.Flags().GetString("inventory")
 		if inventoryPath != "" {
 			// 命令行传了，覆盖配置文件
@@ -89,7 +96,7 @@ func init() {
 	_, err := config.ParseConfig(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "解析配置失败：%v\n", err)
-		os.Exit(1)
+		os.Exit(exitcode.ParamError)
 	}
 
 	// 并发数兜底：配置文件为空/0 → 强制使用默认值 50
@@ -99,14 +106,17 @@ func init() {
 	}
 
 	// 全局标志
-	rootCmd.PersistentFlags().IntP("concurrency", "c", concurrencyDefault, "并发连接数")
-	rootCmd.PersistentFlags().BoolP("debug", "v", false, "是否开启调试模式")
-	rootCmd.PersistentFlags().Bool("no-history", false, "本次执行不记录执行历史")
-	rootCmd.PersistentFlags().StringP("inventory", "i", "", "指定主机清单文件 (优先于配置文件)")
+	rootCmd.PersistentFlags().IntP("concurrency", "c", concurrencyDefault, "并发连接数（客户端同时连接服务端的数量）")
+	rootCmd.PersistentFlags().BoolP("debug", "v", false, "开启调试模式（输出 SSH 连接、命令执行等详细日志到 stderr）")
+	rootCmd.PersistentFlags().Bool("no-history", false, "本次执行不记录到历史日志")
+	rootCmd.PersistentFlags().StringP("inventory", "i", "", "指定主机清单文件（优先于配置文件）")
 	rootCmd.PersistentFlags().BoolP("version", "V", false, "显示版本信息")
-	rootCmd.PersistentFlags().IntP("timeout", "t", 0, "单台执行超时（秒，0=不限制）")
-	rootCmd.PersistentFlags().String("retry-file", "", "失败主机列表输出文件路径 (如 /tmp/failed.txt)")
-	rootCmd.PersistentFlags().String("limit", "", "从文件读取目标主机列表 (如 --limit @/tmp/failed.txt)")
+	rootCmd.PersistentFlags().IntP("timeout", "t", 0, "单台执行超时秒数（默认0=不限制，超时主机标记失败不拖垮整批）")
+	rootCmd.PersistentFlags().String("retry-file", "", "将失败主机写入文件，便于 --limit @file 重跑")
+	rootCmd.PersistentFlags().String("limit", "", "从文件读取目标主机列表（@file，常用于对失败主机重跑）")
+	rootCmd.PersistentFlags().StringP("output", "o", "text", "输出格式：text（人类阅读友好）/ JSON（结构化，适合脚本和 AI Agent 消费）")
+	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "静默模式：只输出命令原始 stdout，无装饰文本（适合管道、重定向、AI Agent）")
+	rootCmd.PersistentFlags().Bool("dry-run", false, "干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览）")
 
 	// 添加子命令
 	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd)
@@ -116,8 +126,8 @@ func init() {
 // Execute 入口函数：外部 main 调用这个方法
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(exitcode.InternalError)
 	}
 }
 
@@ -184,18 +194,18 @@ func applyLimit(hosts []*Host, limitPath string) []*Host {
 	return filtered
 }
 
-func execute(hostSessions []HostSession, failedHosts map[string]string, flags *config.Flags, mod module.Module, modName string) {
+func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags *config.Flags, mod module.Module, modName string) int {
 	start := time.Now()
 	// 使用并发执行命令
 	var wg sync.WaitGroup                     // 用于等待所有goroutine完成
 	var resultsMutex sync.Mutex               // 用于保护results的并发写入
 	results := make(map[string]module.Result) // 存储每个主机的执行结果（key:主机地址，value:命令输出）
 	// 将连接失败的主机合并到 results
-	for addr, errMsg := range failedHosts {
+	for addr, ce := range failedHosts {
 		results[addr] = module.Result{
 			Success: false,
 			Output:  "",
-			Error:   errMsg,
+			Error:   ce.Msg,
 			Change:  false,
 		}
 	}
@@ -260,11 +270,19 @@ func execute(hostSessions []HostSession, failedHosts map[string]string, flags *c
 	// 仅 check 命令触发表格美化，避免 script 模块同名脚本误匹配
 	if flags.Parameter["_check_module"] == "true" {
 		PolishOutput(addrs, results)
-		return
+		writeRetryFile(flags, results, addrs)
+		return computeExitCode(failedHosts, results)
 	}
 
 	// 汇总模式：只显示失败主机详情，成功主机折叠为一行
 	isSummary := flags.Parameter["summary"] == "true"
+
+	// 	JSON 输出模式
+	if flags.Output == "json" {
+		outputJSON(addrs, results)
+		writeRetryFile(flags, results, addrs)
+		return exitcode.Success
+	}
 
 	if isSummary {
 		// 汇总模式输出
@@ -272,21 +290,73 @@ func execute(hostSessions []HostSession, failedHosts map[string]string, flags *c
 		for _, addr := range addrs {
 			result := results[addr]
 			if !result.Success {
-				Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
-					addr, result.Output, result.Error)
+				if config.GlobalFlags.Quiet {
+					fmt.Print(result.Error)
+				} else {
+					Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
+						addr, result.Output, result.Error)
+				}
 			} else {
 				okCount++
 			}
 		}
-		if okCount > 0 {
+		if okCount > 0 && !config.GlobalFlags.Quiet {
 			fmt.Printf("\033[32m✅ %d/%d 成功\033[0m\n", okCount, len(addrs))
 		}
 		writeRetryFile(flags, results, addrs)
-		return
+		return computeExitCode(failedHosts, results)
 	}
 
 	outputResults(addrs, results)
 	writeRetryFile(flags, results, addrs)
+	return computeExitCode(failedHosts, results)
+}
+
+func computeExitCode(failedHosts map[string]ConnError, results map[string]module.Result) int {
+	if len(results) == 0 {
+		return exitcode.Success
+	}
+
+	allSuccess := true
+	hasAuthFail := false
+	hasConnectFail := false
+	hasSessionFail := false
+	hasTimeout := false
+
+	for _, r := range results {
+		if r.Success {
+			continue
+		}
+		allSuccess = false
+		if r.TimedOut {
+			hasTimeout = true
+		}
+	}
+
+	for _, ce := range failedHosts {
+		switch ce.Kind {
+		case "auth":
+			hasAuthFail = true
+		case "connect":
+			hasConnectFail = true
+		case "session":
+			hasSessionFail = true
+		}
+	}
+
+	// 优先级：认证 > 连接 > 超时 > 部分失败
+	switch {
+	case allSuccess:
+		return exitcode.Success
+	case hasAuthFail:
+		return exitcode.AuthFail
+	case hasConnectFail, hasSessionFail:
+		return exitcode.ConnectFail
+	case hasTimeout:
+		return exitcode.Timeout
+	default:
+		return exitcode.PartialFail
+	}
 }
 
 func runWithTimeout(mod module.Module, hs HostSession, flags *config.Flags, timeout time.Duration) module.Result {
@@ -305,15 +375,23 @@ func runWithTimeout(mod module.Module, hs HostSession, flags *config.Flags, time
 		hs.Session.Close()
 		hs.Client.Close()
 		return module.Result{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Sprintf("执行超时（%v）", timeout),
-			Change:  false,
+			Success:  false,
+			Output:   "",
+			Error:    fmt.Sprintf("执行超时（%v）", timeout),
+			Change:   false,
+			TimedOut: true,
 		}
 	}
 }
 
 func outputResults(addrs []string, results map[string]module.Result) {
+	if config.GlobalFlags.Quiet {
+		for _, addr := range addrs {
+			fmt.Print(results[addr].Output)
+		}
+		return
+	}
+
 	var successAddrs, failedAddrs []string
 	for _, addr := range addrs {
 		if results[addr].Success {
@@ -346,6 +424,31 @@ func outputResults(addrs []string, results map[string]module.Result) {
 		fmt.Printf("  \033[31m❌ %d/%d 失败\033[0m", len(failedAddrs), len(addrs))
 	}
 	fmt.Println()
+}
+
+type jsonResult struct {
+	Host    string `json:"host"`
+	Success bool   `json:"success"`
+	Output  string `json:"output"`
+	Error   string `json:"error"`
+	Change  bool   `json:"change"`
+}
+
+func outputJSON(addrs []string, results map[string]module.Result) {
+	out := make([]jsonResult, 0, len(addrs))
+	for _, addr := range addrs {
+		r := results[addr]
+		out = append(out, jsonResult{
+			Host:    addr,
+			Success: r.Success,
+			Output:  r.Output,
+			Error:   r.Error,
+			Change:  r.Change,
+		})
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(out)
 }
 
 func writeRetryFile(flags *config.Flags, results map[string]module.Result, addrs []string) {

@@ -29,7 +29,10 @@ type Flags struct {
 	NoHistory     bool   // 本次执行不记录执行历史
 	Timeout       int    // 单台执行超时（秒，0=不限制）
 	RetryFile     string // 失败主机列表输出文件路径（空=不输出）
-	Limit         string // 目标主机限制（@file 或 主机列表）
+	Limit         string // 目标主机限制: @file (如 --limit @/tmp/failed.txt)
+	Output        string // 输出格式: text(默认) / json
+	Quiet         bool   // 静默模式：只输出命令 stdout，无装饰文本
+	DryRun        bool   // 干跑模式：只显示将要执行的命令和目标，不实际执行
 }
 
 var GlobalFlags = &Flags{

@@ -278,6 +278,25 @@ fastdp -c 10 shell -a "lsblk" web
 
 # 指定主机清单文件 (优先于配置文件)
 fastdp -i ./host shell -a "df -h" gpu
+
+# 单台超时 30 秒，失败重试 2 次
+fastdp -t 30 shell -a "systemctl restart nginx" web
+
+# 静默模式 + 模板变量（只输出结果，无装饰）
+fastdp shell -a 'echo {{.ip}} $(hostname)' all -q
+
+# 直接写入 /etc/hosts（集群初始化场景）
+fastdp shell -a 'echo {{.ip}} $(hostname)' all -q >> /etc/hosts
+
+# 查看 host 文件原值（域名不解析）
+fastdp shell -a 'echo {{.addr}}' all -q
+
+# JSON 输出（适合脚本和 AI Agent 消费）
+fastdp shell -a "uptime" all --output json
+
+# 失败主机写入文件，后续只对失败主机重跑
+fastdp -t 30 --retry-file /tmp/failed.txt shell -a "uptime" all
+fastdp shell -a "uptime" --limit @/tmp/failed.txt all
 ```
 
 ## 模块说明
@@ -302,8 +321,13 @@ fastdp shell -a "free -h" master node 192.168.10.100
 fastdp shell -a 'ls -l /root' all
 fastdp shell -a "echo hello world" all
 
-# 高阶用法：批量输出 IP + 主机名
-fastdp shell -a 'echo $(hostname -I|awk '\''{print $1}'\'') $(hostname)' all | grep -v 'output:'
+# 批量输出 IP + 主机名（配合模板变量 + 静默模式）
+fastdp shell -a 'echo {{.ip}} $(hostname)' all -q
+# 192.168.1.10 zpf-server
+# 192.168.1.11 node-1
+
+# 直接写入 /etc/hosts（集群初始化场景）
+fastdp shell -a 'echo {{.ip}} $(hostname)' all -q >> /etc/hosts
 ```
 
 #### 命令安全检查
@@ -385,12 +409,22 @@ fastdp fetch -r "/tmp/*.log" --no-ip-dir all
 
 > script 模块执行前会扫描脚本内容，危险命令（如 `rm -rf /`）会触发与 shell 模块相同的安全拦截/确认机制。
 
+参数：
+- `-f` / `--file`：本地脚本路径（必需，文本文件，最大 512KB）
+- `--args`：传递给脚本的位置参数（空格分隔，脚本内通过 `$1` `$2` 获取）
+- `--env`：传递给脚本的环境变量（格式：`KEY=val KEY2=val2`）
+- `-y` / `--yes`：危险命令自动确认（CI 场景）
+- `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
+
 ```bash
 # 上传脚本并在所有主机执行
 fastdp script -f run.sh all
 
 # 执行到指定组和 IP
-fastdp script -f check.sh master node 192.168.10.100
+fastdp script -f check.sh master node 192.168.1.100
+
+# 传递参数和环境变量
+fastdp script -f init.sh --args "eth0 192.168.1.1" --env "MODE=persist MTU=9000" all
 ```
 
 ![image-20260529175910671](./assets/script.png)
@@ -570,8 +604,45 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | --debug       | -v   | 开启调试模式                       | false  |
 | --no-history  | -    | 本次执行不记录执行历史             | false  |
 | --inventory   | -i   | 指定主机清单文件（优先于配置文件） | ""     |
+| --timeout     | -t   | 单台执行超时秒数（0=不限制，超时主机标记失败不拖垮整批） | 0 |
+| --retry-file  | -    | 将失败主机写入文件，便于 --limit @file 重跑 | "" |
+| --limit       | -    | 从文件读取目标主机列表（@file，常用于对失败主机重跑） | "" |
+| --output      | -    | 输出格式：text（人类阅读）/ JSON（结构化，适合脚本和 AI Agent） | text |
+| --quiet       | -q   | 静默模式：只输出命令原始 stdout，无装饰文本（适合管道、重定向到文件、AI Agent 消费） | false |
+| --dry-run     | -    | 干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览） | false |
 | --version     | -V   | 显示版本信息                       | false  |
 | --help        | -h   | 查看帮助信息                       | -      |
+
+## 退出码
+
+| 退出码 | 含义 | 处理建议 |
+| ------ | ---- | -------- |
+| 0 | 全部成功 | — |
+| 1 | 部分失败（模块执行失败） | 查看 stderr 判断原因 |
+| 2 | 参数/配置错误 | 修正命令或配置 |
+| 3 | 连接失败 | 检查目标机网络/sshd |
+| 4 | 超时 | 增大 --timeout 后重跑 |
+| 5 | 认证失败 | 检查 SSH 凭据 |
+| 6 | 程序内部错误 | 上报 bug |
+
+## 模板变量（shell / script 模块）
+
+命令中可使用模板变量，fastdp 会在执行前替换为当前主机的实际值：
+
+| 变量 | 说明 | 示例 |
+| ---- | ---- | ---- |
+| `{{.addr}}` | host 文件原值（IP 或域名） | `zpf` 或 `192.168.1.10` |
+| `{{.ip}}` | 实际 IP 地址（域名自动 DNS 解析） | `192.168.1.10` |
+| `{{.port}}` | SSH 端口 | `22` |
+| `{{.user}}` | SSH 用户 | `root` |
+
+```bash
+# 替代复杂的 shell IP 解析，直接写入 /etc/hosts
+fastdp shell -a 'echo {{.ip}} $(hostname)' all -q >> /etc/hosts
+
+# 脚本内也可使用模板变量
+fastdp script -f init.sh --args "{{.ip}}" all
+```
 
 ## 主机区间展开（所有模块通用）
 
@@ -602,16 +673,20 @@ fastdp copy -s a.conf -d /tmp/ 'node-[100:102]'
    - 仅支持纯文本脚本（最大 512KB），禁止上传二进制文件
    - 非 .sh 后缀的文件会发出警告但不阻止执行
 5. **错误排查**：
-   - 开启调试模式（-v）可查看详细的 SSH 连接日志和命令执行过程
-   - 若主机连接失败，检查 SSH 端口、认证方式及网络连通性
-6. **check 模块**：
-    - 巡检脚本路径：`~/.fastdp/fastdp-check.sh` > `/etc/fastdp/fastdp-check.sh`
-    - 可自行编辑脚本内容，输出 `key=value` 格式即可自动识别
-7. **权限说明**：
-    - 方式一（系统级安装）仅限 root 用户执行，安装和普通用户无关
-    - 方式二（用户级安装）无需 root，所有文件位于家目录，互不干扰
-    - 巡检脚本中 `hw_time`（硬件时间）需要 root 权限才能读取，普通用户执行时该字段为空属正常现象
-    - 普通用户如需完整巡检结果，可通过 `sudo hwclock -r` 单独获取硬件时间
+    - 开启调试模式（-v）可查看详细的 SSH 连接日志和命令执行过程
+    - 若主机连接失败，检查 SSH 端口、认证方式及网络连通性
+    - 使用 `--retry-file` 记录失败主机，再用 `--limit @file` 只对失败主机重跑
+6. **退出码**：
+    - 0=全部成功、1=部分失败、2=参数错误、3=连接失败、4=超时、5=认证失败、6=内部错误
+    - 脚本和 AI Agent 可根据退出码决定重试策略
+7. **check 模块**：
+     - 巡检脚本路径：`~/.fastdp/fastdp-check.sh` > `/etc/fastdp/fastdp-check.sh`
+     - 可自行编辑脚本内容，输出 `key=value` 格式即可自动识别
+8. **权限说明**：
+     - 方式一（系统级安装）仅限 root 用户执行，安装和普通用户无关
+     - 方式二（用户级安装）无需 root，所有文件位于家目录，互不干扰
+     - 巡检脚本中 `hw_time`（硬件时间）需要 root 权限才能读取，普通用户执行时该字段为空属正常现象
+     - 普通用户如需完整巡检结果，可通过 `sudo hwclock -r` 单独获取硬件时间
 
 ## 帮助与反馈
 

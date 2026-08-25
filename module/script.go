@@ -6,6 +6,7 @@ import (
 	. "fastdp/utils"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -28,18 +29,39 @@ func (m *ScriptModule) Run(hs HostSession, flags *config.Flags) Result {
 		}
 	}
 
+	// 替换模板变量 {{.ip}} {{.port}} {{.user}}
+	contentStr := ReplaceTemplate(string(content), hs)
+
 	// 2. 准备输出
 	var stdout, stderr bytes.Buffer
 	hs.Session.Stdout = &stdout
 	hs.Session.Stderr = &stderr
 
-	// ===================== 【核心修复】随机分隔符，永远不冲突 =====================
-	// 生成一个几乎不可能重复的结束标记
+	// 3. 构建执行命令（支持参数和环境变量）
+	scriptArgs := strings.TrimSpace(flags.Parameter["script_args"])
+	scriptEnv := strings.TrimSpace(flags.Parameter["script_env"])
+
 	delimiter := fmt.Sprintf("__FASTDP_SCRIPT_EOF_%d_%d", time.Now().UnixNano(), os.Getpid())
 
-	// 安全执行脚本
-	cmd := fmt.Sprintf("bash <<'%s'\n%s\n%s", delimiter, string(content), delimiter)
-	// ==========================================================================
+	// 在 heredoc 内设置环境变量和位置参数
+	var heredocContent strings.Builder
+	if scriptEnv != "" {
+		for _, pair := range strings.Fields(scriptEnv) {
+			heredocContent.WriteString("export " + pair + "\n")
+		}
+	}
+	if scriptArgs != "" {
+		// 使用 set -- 传递位置参数（每个参数用单引号包裹防空格问题）
+		heredocContent.WriteString("set --")
+		for _, arg := range strings.Fields(scriptArgs) {
+			heredocContent.WriteString(" '" + strings.ReplaceAll(arg, "'", "'\\''") + "'")
+		}
+		heredocContent.WriteString("\n")
+	}
+	heredocContent.WriteString(contentStr)
+
+	cmd := fmt.Sprintf("bash <<'%s'\n%s\n%s", delimiter, heredocContent.String(), delimiter)
+
 	err = hs.Session.Run(cmd)
 
 	if err != nil {

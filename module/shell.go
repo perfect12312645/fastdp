@@ -21,8 +21,11 @@ func (m *ShellModule) Run(hs HostSession, flags *config.Flags) Result {
 	hs.Session.Stdout = &stdout // 将命令的标准输出重定向到缓冲区
 	hs.Session.Stderr = &stderr // 将命令的标准错误输出重定向到缓冲区
 
-	// 执行命令（*flags.Parameter是命令内容）
-	if err := hs.Session.Run(flags.Parameter["args"]); err != nil {
+	// 替换模板变量 {{.ip}} {{.port}} {{.user}}
+	cmd := ReplaceTemplate(flags.Parameter["args"], hs)
+
+	// 执行命令
+	if err := hs.Session.Run(cmd); err != nil {
 		return Result{
 			Success: false,
 			Output:  stdout.String(),

@@ -7,10 +7,11 @@ import (
 
 // Result 模块执行结果的统一格式
 type Result struct {
-	Success bool   // 是否执行成功
-	Output  string // 标准输出
-	Error   string // 错误信息（如果失败）
-	Change  bool   // 是否改变
+	Success  bool   // 是否执行成功
+	Output   string // 标准输出
+	Error    string // 错误信息（如果失败）
+	Change   bool   // 是否改变
+	TimedOut bool   // 是否执行超时（由 runWithTimeout 标记）
 }
 
 // Module 模块接口，所有模块必须实现这些方法

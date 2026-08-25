@@ -3,6 +3,7 @@ package cobra
 import (
 	"fastdp/module"
 	"fastdp/pkg/config"
+	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -37,17 +38,17 @@ var fetchCmd = &cobra.Command{
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
-			os.Exit(-2)
+			os.Exit(exitcode.ParamError)
 		}
 
 		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("fetch")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
-			os.Exit(-3)
+			os.Exit(exitcode.InternalError)
 		}
 
-		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "fetch")
+		os.Exit(execute(hostSessions, failedHosts, config.GlobalFlags, mod, "fetch"))
 	},
 	Example: `
   # 批量拉取所有主机 /tmp/sec* 文件

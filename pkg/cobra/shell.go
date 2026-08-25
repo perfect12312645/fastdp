@@ -3,10 +3,12 @@ package cobra
 import (
 	"fastdp/module"
 	"fastdp/pkg/config"
+	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
 var shellCmd = &cobra.Command{
@@ -32,22 +34,32 @@ var shellCmd = &cobra.Command{
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
-			os.Exit(-2)
+			os.Exit(exitcode.ParamError)
+		}
+
+		// 干跑模式：显示命令和目标主机后退出
+		if config.GlobalFlags.DryRun {
+			fmt.Println("命令:", aValue)
+			fmt.Printf("目标主机 (%d 台):\n", len(execHosts))
+			for _, h := range execHosts {
+				fmt.Printf("  %s\n", h.Address)
+			}
+			os.Exit(exitcode.Success)
 		}
 
 		yes, _ := cmd.Flags().GetBool("yes")
 		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
 		if !enforceCommandSafety(aValue, execHosts, yes, allowDangerous) {
-			os.Exit(1)
+			os.Exit(exitcode.ParamError)
 		}
 
 		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("shell")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
-			os.Exit(-3)
+			os.Exit(exitcode.InternalError)
 		}
-		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "shell")
+		os.Exit(execute(hostSessions, failedHosts, config.GlobalFlags, mod, "shell"))
 	},
 	Example: `
   # 基础用法：单组执行命令
@@ -60,8 +72,8 @@ var shellCmd = &cobra.Command{
   fastdp shell -a 'ls -l /root' all
   fastdp shell -a "echo hello world" all
 
-  # 高阶用法：批量输出 IP + 主机名（过滤无用输出）
-  fastdp shell -a 'echo $(hostname -I|awk '\''{print $1}'\'') $(hostname)' all | grep -v 'output:'
+  # 批量输出 IP + 主机名（模板变量 + 静默模式）结果可直接重定向到 /etc/hosts（集群初始化场景）
+  fastdp shell -a 'echo {{.ip}} $(hostname)' all -q
 
   # 危险命令（如 rm -rf /tmp/*）默认交互确认，--yes 跳过（CI）
   fastdp shell -a 'rm -rf /tmp/*' master

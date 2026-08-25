@@ -3,6 +3,7 @@ package cobra
 import (
 	"fastdp/module"
 	"fastdp/pkg/config"
+	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -36,23 +37,23 @@ var copyCmd = &cobra.Command{
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
-			os.Exit(-2)
+			os.Exit(exitcode.ParamError)
 		}
 		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("copy")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
-			os.Exit(-3)
+			os.Exit(exitcode.InternalError)
 		}
 		// 转换为Debug日志，使用%v格式化时间对象
 		Debugf("copy模块，开始计算源文件md5: %v", time.Now())
 		err = module.GetSource(config.GlobalFlags)
 		if err != nil {
 			Errorf("copy模块，获取源文件信息失败: %v", err)
-			os.Exit(1)
+			os.Exit(exitcode.ParamError)
 		}
 		Debugf("copy模块，计算源文件md5结束: %v", time.Now())
-		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "copy")
+		os.Exit(execute(hostSessions, failedHosts, config.GlobalFlags, mod, "copy"))
 	},
 	Example: `  # 推送配置文件到 web 组
   fastdp copy -s app.conf -d /etc/ web

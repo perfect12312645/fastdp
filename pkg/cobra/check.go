@@ -3,6 +3,7 @@ package cobra
 import (
 	"fastdp/module"
 	"fastdp/pkg/config"
+	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -79,16 +80,16 @@ var checkCmd = &cobra.Command{
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
-			os.Exit(-2)
+			os.Exit(exitcode.ParamError)
 		}
 
 		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("script") // ✅ 直接复用 script 模块
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
-			os.Exit(-3)
+			os.Exit(exitcode.InternalError)
 		}
-		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "check")
+		os.Exit(execute(hostSessions, failedHosts, config.GlobalFlags, mod, "check"))
 	},
 	Example: `
   # 对所有主机执行环境检查（默认表格输出）

@@ -18,12 +18,17 @@ type HostSession struct {
 	Addr    string       // 主机地址（如 "192.168.1.1:22"）
 }
 
-func SshConnect(allHosts []*Host) ([]HostSession, map[string]string) {
+type ConnError struct {
+	Kind string // "auth" | "connect" | "session"
+	Msg  string
+}
+
+func SshConnect(allHosts []*Host) ([]HostSession, map[string]ConnError) {
 	var (
 		wg           sync.WaitGroup
 		mu           sync.Mutex
 		hostSessions []HostSession
-		failedHosts  = make(map[string]string)
+		failedHosts  = make(map[string]ConnError)
 	)
 
 	for _, host := range allHosts {
@@ -66,7 +71,7 @@ func SshConnect(allHosts []*Host) ([]HostSession, map[string]string) {
 				keyAuth, err := publicKeyAuth()
 				if err != nil {
 					mu.Lock()
-					failedHosts[h.Address] = err.Error()
+					failedHosts[h.Address] = ConnError{Kind: "auth", Msg: err.Error()}
 					mu.Unlock()
 					return
 				}
@@ -82,7 +87,7 @@ func SshConnect(allHosts []*Host) ([]HostSession, map[string]string) {
 			client, err := ssh.Dial("tcp", h.Address+":"+port, sshConfig)
 			if err != nil {
 				mu.Lock()
-				failedHosts[h.Address] = err.Error()
+				failedHosts[h.Address] = ConnError{Kind: "connect", Msg: err.Error()}
 				mu.Unlock()
 				return
 			}
@@ -90,7 +95,7 @@ func SshConnect(allHosts []*Host) ([]HostSession, map[string]string) {
 			session, err := client.NewSession()
 			if err != nil {
 				mu.Lock()
-				failedHosts[h.Address] = err.Error()
+				failedHosts[h.Address] = ConnError{Kind: "session", Msg: err.Error()}
 				mu.Unlock()
 				client.Close()
 				return

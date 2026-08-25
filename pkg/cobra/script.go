@@ -3,6 +3,7 @@ package cobra
 import (
 	"fastdp/module"
 	"fastdp/pkg/config"
+	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -54,6 +55,15 @@ var scriptCmd = &cobra.Command{
 		config.GlobalFlags.HostInventory = args
 		scriptPath, _ := cmd.Flags().GetString("file")
 		config.GlobalFlags.Parameter["script_file"] = scriptPath
+		// 传递脚本参数和环境变量
+		scriptArgs, _ := cmd.Flags().GetString("args")
+		if scriptArgs != "" {
+			config.GlobalFlags.Parameter["script_args"] = scriptArgs
+		}
+		scriptEnv, _ := cmd.Flags().GetString("env")
+		if scriptEnv != "" {
+			config.GlobalFlags.Parameter["script_env"] = scriptEnv
+		}
 		summary, _ := cmd.Flags().GetBool("summary")
 		if summary {
 			config.GlobalFlags.Parameter["summary"] = "true"
@@ -62,28 +72,44 @@ var scriptCmd = &cobra.Command{
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
-			os.Exit(-2)
+			os.Exit(exitcode.ParamError)
+		}
+
+		// 干跑模式：显示脚本和目标主机后退出
+		if config.GlobalFlags.DryRun {
+			fmt.Println("脚本:", scriptPath)
+			if scriptArgs != "" {
+				fmt.Println("参数:", scriptArgs)
+			}
+			if scriptEnv != "" {
+				fmt.Println("环境变量:", scriptEnv)
+			}
+			fmt.Printf("目标主机 (%d 台):\n", len(execHosts))
+			for _, h := range execHosts {
+				fmt.Printf("  %s\n", h.Address)
+			}
+			os.Exit(exitcode.Success)
 		}
 
 		// 脚本内容安全检查：硬拦截 / 确认
 		content, err := os.ReadFile(scriptPath)
 		if err != nil {
 			Errorf("读取脚本失败: %v", err)
-			os.Exit(1)
+			os.Exit(exitcode.ParamError)
 		}
 		yes, _ := cmd.Flags().GetBool("yes")
 		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
 		if !enforceCommandSafety(string(content), execHosts, yes, allowDangerous) {
-			os.Exit(1)
+			os.Exit(exitcode.ParamError)
 		}
 
 		hostSessions, failedHosts := SshConnect(execHosts)
 		mod, err := module.GetModule("script")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
-			os.Exit(-3)
+			os.Exit(exitcode.InternalError)
 		}
-		execute(hostSessions, failedHosts, config.GlobalFlags, mod, "script")
+		os.Exit(execute(hostSessions, failedHosts, config.GlobalFlags, mod, "script"))
 	},
 	Example: `
   # 上传本地脚本并在所有主机执行
@@ -100,6 +126,8 @@ var scriptCmd = &cobra.Command{
 func init() {
 	scriptCmd.Flags().StringP("file", "f", "", "本地脚本路径 (必需)")
 	_ = scriptCmd.MarkFlagRequired("file")
+	scriptCmd.Flags().String("args", "", "传递给脚本的位置参数（空格分隔，脚本内通过 $1 $2 获取）")
+	scriptCmd.Flags().String("env", "", "传递给脚本的环境变量（格式：KEY=val KEY2=val2）")
 	scriptCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
 	scriptCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")
 	scriptCmd.Flags().BoolP("summary", "s", false, "汇总模式：只显示失败主机，成功主机折叠为一行")
