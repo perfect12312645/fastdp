@@ -114,7 +114,7 @@ func init() {
 	rootCmd.PersistentFlags().IntP("timeout", "t", 0, "单台执行超时秒数（默认0=不限制，超时主机标记失败不拖垮整批）")
 	rootCmd.PersistentFlags().String("retry-file", "", "将失败主机写入文件，便于 --limit @file 重跑")
 	rootCmd.PersistentFlags().String("limit", "", "从文件读取目标主机列表（@file，常用于对失败主机重跑）")
-	rootCmd.PersistentFlags().StringP("output", "o", "text", "输出格式：text（人类阅读友好）/ JSON（结构化，适合脚本和 AI Agent 消费）")
+	rootCmd.PersistentFlags().StringP("output", "o", "text", "输出格式：text（人类阅读友好）/ JSON（结构化，适合脚本和 AI Agent）")
 	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "静默模式：只输出命令原始 stdout，无装饰文本（适合管道、重定向、AI Agent）")
 	rootCmd.PersistentFlags().Bool("dry-run", false, "干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览）")
 
