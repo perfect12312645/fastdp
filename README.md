@@ -328,6 +328,18 @@ fastdp shell -a 'echo {{.ip}} $(hostname)' all -q
 
 # 直接写入 /etc/hosts（集群初始化场景）
 fastdp shell -a 'echo {{.ip}} $(hostname)' all -q >> /etc/hosts
+
+# 聚合统计：平均 CPU 使用率
+fastdp shell -a "mpstat 1 1 | awk '/Average/{print 100-\$NF}'" all --aggregate avg
+
+# P95 延迟（排查毛刺）
+fastdp shell -a "curl -o /dev/null -s -w '%{time_total}' http://api.example.com" all --aggregate p95
+
+# 负载标准差（排查离群节点）
+fastdp shell -a "cat /proc/loadavg | awk '{print \$1}'" all --aggregate stddev
+
+# 中位数 CPU 使用率（不受极端值影响）
+fastdp shell -a "mpstat 1 1 | awk '/平均时间/{print 100-\$NF}'" all --aggregate median
 ```
 
 #### 命令安全检查
@@ -445,6 +457,7 @@ fastdp ping all
 参数：
 - `-g`：竖向格式化输出（类似 mysql \G）
 - `-f`：导出格式，支持 csv / md / html / json
+- `--only`：只检查指定字段（逗号分隔，如 `cpu_cores,cpu_model,mem`）
 
 固定输出字段（18+ 标准字段，支持自定义字段）：
 
@@ -472,6 +485,12 @@ fastdp ping all
 ```bash
 # 对所有主机执行环境检查（默认表格输出）
 fastdp check all
+
+# 只检查 CPU 和内存（只执行需要的检查，更高效）
+fastdp check all --only cpu_cores,cpu_model,mem
+
+# 列出所有可用的检查字段 key
+fastdp check all -l
 
 # 竖向格式化输出
 fastdp check all -g
@@ -610,6 +629,7 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | --output      | -    | 输出格式：text（人类阅读）/ JSON（结构化，适合脚本和 AI Agent） | text |
 | --quiet       | -q   | 静默模式：只输出命令原始 stdout，无装饰文本（适合管道、重定向到文件、AI Agent 消费） | false |
 | --dry-run     | -    | 干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览） | false |
+| --aggregate   | -    | 聚合函数：avg/max/min/sum/median/p95/p99/stddev（对 shell 命令输出的数字进行跨机聚合） | "" |
 | --version     | -V   | 显示版本信息                       | false  |
 | --help        | -h   | 查看帮助信息                       | -      |
 

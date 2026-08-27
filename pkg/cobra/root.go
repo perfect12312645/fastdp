@@ -165,7 +165,17 @@ func GetInfo() ([]*Host, error) {
 	}
 
 	// 打印调试日志
-	Debugf("执行信息 主机组=%v 主机列表=%v 参数=%v", inventory, execHosts, config.GlobalFlags.Parameter)
+	groupNames := make([]string, 0, len(inventory))
+	for _, g := range inventory {
+		if g != nil {
+			groupNames = append(groupNames, g.Name)
+		}
+	}
+	hostAddrs := make([]string, 0, len(execHosts))
+	for _, h := range execHosts {
+		hostAddrs = append(hostAddrs, h.Address)
+	}
+	Debugf("执行信息 主机组=%v 主机列表=%v 参数=%v", groupNames, hostAddrs, config.GlobalFlags.Parameter)
 	return execHosts, nil
 }
 
@@ -267,8 +277,8 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 			BuildHistoryEntry(command, hosts, ok, failed, changed, unchanged, time.Since(start)))
 	}
 
-	// 仅 check 命令触发表格美化，避免 script 模块同名脚本误匹配
-	if flags.Parameter["_check_module"] == "true" {
+	// check 模块触发表格美化
+	if modName == "check" {
 		PolishOutput(addrs, results)
 		writeRetryFile(flags, results, addrs)
 		return computeExitCode(failedHosts, results)
@@ -307,8 +317,11 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 		return computeExitCode(failedHosts, results)
 	}
 
-	outputResults(addrs, results)
+	if flags.Parameter["aggregate"] == "" || !config.GlobalFlags.Quiet {
+		outputResults(addrs, results)
+	}
 	writeRetryFile(flags, results, addrs)
+	computeAggregate(flags, addrs, results)
 	return computeExitCode(failedHosts, results)
 }
 
@@ -356,6 +369,50 @@ func computeExitCode(failedHosts map[string]ConnError, results map[string]module
 		return exitcode.Timeout
 	default:
 		return exitcode.PartialFail
+	}
+}
+
+func computeAggregate(flags *config.Flags, addrs []string, results map[string]module.Result) {
+	aggType := flags.Parameter["aggregate"]
+	if aggType == "" {
+		return
+	}
+	if aggType != "avg" && aggType != "max" && aggType != "min" && aggType != "sum" &&
+		aggType != "median" && aggType != "p95" && aggType != "p99" && aggType != "stddev" {
+		Errorf("未知的聚合函数: %s（支持 avg/max/min/sum/median/p95/p99/stddev）", aggType)
+		return
+	}
+
+	var values []float64
+	errorCount := 0
+
+	for _, addr := range addrs {
+		r := results[addr]
+		if !r.Success {
+			continue
+		}
+		v, ok := ParseNumber(r.Output)
+		if !ok {
+			errorCount++
+			if !config.GlobalFlags.Quiet {
+				Errorf("⚠️  %s: 输出 %q 非数字，已跳过", addr, strings.TrimSpace(r.Output))
+			}
+			continue
+		}
+		values = append(values, v)
+	}
+
+	value, ok := ComputeAggregate(values, aggType)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "聚合: 无有效数据")
+		return
+	}
+
+	if config.GlobalFlags.Quiet {
+		fmt.Printf("%.2f\n", value)
+	} else {
+		Changedf("─── 聚合 ───")
+		Changedf("%s: %.2f (%d 台主机参与, %d 台跳过)", aggType, value, len(values), errorCount)
 	}
 }
 
@@ -411,7 +468,7 @@ func outputResults(addrs []string, results map[string]module.Result) {
 	}
 
 	if len(failedAddrs) > 0 {
-		fmt.Printf("─────────────────── ❌ 失败主机（%d/%d） ───────────────────\n", len(failedAddrs), len(addrs))
+		Errorf("─── 失败主机（%d/%d） ───", len(failedAddrs), len(addrs))
 		for _, addr := range failedAddrs {
 			result := results[addr]
 			Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
@@ -517,6 +574,7 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 		{"hw_time", "硬件时间"},
 		{"gpu", "GPU"},
 	}
+
 	// 标准字段 key 集合（用于快速判断）
 	standardKeyMap := make(map[string]bool)
 	for _, f := range standardFields {
@@ -533,11 +591,31 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 		data := parseCheckOutput(res.Output)
 		hostDataCache[ip] = data // 缓存
 
-		// 收集自定义字段
+		// 收集自定义字段（不在预定义字段中的）
 		for k := range data {
 			if !standardKeyMap[k] {
 				customFieldSet[k] = true
 			}
+		}
+	}
+
+	// 根据实际返回的数据过滤 standardFields（只显示有数据的字段）
+	if len(hostDataCache) > 0 {
+		filtered := make([]struct{ key, name string }, 0)
+		for _, f := range standardFields {
+			// 检查是否有任何主机返回了该字段
+			for _, data := range hostDataCache {
+				if _, ok := data[f.key]; ok {
+					filtered = append(filtered, f)
+					break
+				}
+			}
+		}
+		standardFields = filtered
+		// 同步更新 keyMap
+		standardKeyMap = make(map[string]bool)
+		for _, f := range standardFields {
+			standardKeyMap[f.key] = true
 		}
 	}
 

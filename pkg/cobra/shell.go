@@ -27,6 +27,10 @@ var shellCmd = &cobra.Command{
 		config.GlobalFlags.HostInventory = args
 		aValue, _ := cmd.Flags().GetString("args")
 		config.GlobalFlags.Parameter["args"] = aValue
+		aggregate, _ := cmd.Flags().GetString("aggregate")
+		if aggregate != "" {
+			config.GlobalFlags.Parameter["aggregate"] = aggregate
+		}
 		summary, _ := cmd.Flags().GetBool("summary")
 		if summary {
 			config.GlobalFlags.Parameter["summary"] = "true"
@@ -75,6 +79,13 @@ var shellCmd = &cobra.Command{
   # 批量输出 IP + 主机名（模板变量 + 静默模式）结果可直接重定向到 /etc/hosts（集群初始化场景）
   fastdp shell -a 'echo {{.ip}} $(hostname)' all -q
 
+  # 聚合统计：计算集群平均 CPU 使用率
+  fastdp shell -a "mpstat 1 1 | awk '/Average/{print 100-\$NF}'" all --aggregate avg
+
+  # 中位数、P95、标准差
+  fastdp shell -a "mpstat 1 1 | awk '/Average/{print 100-\$NF}'" all --aggregate median
+  fastdp shell -a "curl -o /dev/null -s -w '%{time_total}' http://example.com" all --aggregate p95
+
   # 危险命令（如 rm -rf /tmp/*）默认交互确认，--yes 跳过（CI）
   fastdp shell -a 'rm -rf /tmp/*' master
   fastdp shell -a 'rm -rf /tmp/*' master --yes
@@ -85,6 +96,7 @@ var shellCmd = &cobra.Command{
 func init() {
 	shellCmd.Flags().StringP("args", "a", "", "要执行的 shell 命令 (必需)")
 	_ = shellCmd.MarkFlagRequired("args")
+	shellCmd.Flags().String("aggregate", "", "聚合函数：avg/max/min/sum/median/p95/p99/stddev")
 	shellCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
 	shellCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")
 	shellCmd.Flags().BoolP("summary", "s", false, "汇总模式：只显示失败主机，成功主机折叠为一行")

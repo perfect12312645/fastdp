@@ -5,6 +5,12 @@
 # 【规则】
 # 1. 内置字段：工具固定解析，中文名称、有序展示、格式化输出
 # 2. 自定义字段：只需追加 echo "key=value"，工具自动识别展示
+# 3. 多行检查项：用 # BEGIN key 和 # END key 包裹，支持 --only 选择性执行
+#    单行检查项：直接写 echo "key=value"，工具自动从 echo 语句解析 key
+#
+# 【--only 用法】
+#   fastdp check all --only hostname,os    # 只执行 hostname 和 os 的检查
+#   fastdp check all -l                     # 列出所有可用的字段 key
 #
 #===============================================================================
 
@@ -37,6 +43,7 @@ echo "kernel=$(uname -r)"
 # 内存大小
 echo "mem=$(free -h | awk '/^Mem:/{print $2}')"
 
+# BEGIN disk
 # 磁盘信息（自动过滤U盘/光盘/loop设备，自动识别 NVMe/SSD/HDD）
 disk_info=$(lsblk -d -n -o NAME,SIZE,ROTA | grep -Ev '^loop|^dm-|^sr[0-9]|^zram|^md' | awk '{
     type = "SSD"
@@ -45,7 +52,9 @@ disk_info=$(lsblk -d -n -o NAME,SIZE,ROTA | grep -Ev '^loop|^dm-|^sr[0-9]|^zram|
     printf "%s:%s:%s,", $1, $2, type
 }' | sed 's/,$//')
 echo "disk=$disk_info"
+# END disk
 
+# BEGIN firewall
 # 防火墙状态：active/enabled
 if systemctl list-unit-files --type=service | grep -q firewalld; then
     fw_status=$(systemctl is-active firewalld)
@@ -55,7 +64,9 @@ else
     fw_enable="disabled"
 fi
 echo "firewall=${fw_status}/${fw_enable}"
+# END firewall
 
+# BEGIN selinux
 # SELinux 状态
 if command -v getenforce &>/dev/null; then
     selinux_current=$(getenforce)
@@ -65,6 +76,7 @@ fi
 selinux_config="Disabled"
 [ -f /etc/selinux/config ] && selinux_config=$(grep -E '^SELINUX=' /etc/selinux/config | awk -F= '{print $2}')
 echo "selinux=${selinux_current}/${selinux_config}"
+# END selinux
 
 # 交换分区
 echo "swap=$(free -h | awk '/^Swap:/{print $2}')"
@@ -75,9 +87,11 @@ echo "timezone=$(timedatectl show -p Timezone --value 2>/dev/null || echo "unkno
 # 系统时间
 echo "sys_time=$(date +"%Y-%m-%d %H:%M:%S")"
 
-# 硬件时间
-echo "hw_time=$(hwclock -r 2>/dev/null | head -1 || echo "unknown")"
+# 硬件时间（需要 root 权限）
+hw_out=$(hwclock -r 2>/dev/null)
+echo "hw_time=${hw_out:-unknown}"
 
+# BEGIN gpu
 # NVIDIA GPU 设备 ID → 型号映射（常见卡型，未匹配的返回空）
 nvidia_name() {
     case "$1" in
@@ -208,7 +222,9 @@ else
     [ -z "$gpu" ] && gpu="none"
     echo "gpu=${gpu%;}"
 fi
+# END gpu
 
+# BEGIN net
 # 网卡信息（自动过滤 docker/k8s 虚拟网卡，含速率）
 net=$(ip -4 addr show up | grep -w inet | grep -v 127.0.0.1 | \
 grep -Ev 'docker|flannel|calico|vxlan|cni|kube-ipvs|veth|bridge' | \
@@ -222,26 +238,33 @@ awk '{print $NF" "$2}' | sort -u | while read -r iface addr; do
     echo "${iface}:${addr}:${spd}"
 done | tr '\n' ',' | sed 's/,$//')
 echo "net=$net"
+# END net
 
+# BEGIN gateway
 # 默认网关
 gateway=$(ip route show default 2>/dev/null | awk '/default/ {print $3}' | head -1)
 [ -z "$gateway" ] && gateway="none"
 echo "gateway=$gateway"
+# END gateway
 
 #===============================================================================
 # ===================== 【用户自定义字段 - 可自由添加】=====================
-# 格式：echo "key=value"
-# 示例如下：
+# 格式：
+#   单行：echo "key=value"
+#   多行：用 # BEGIN key 和 # END key 包裹，支持 --only 选择性执行
 #===============================================================================
 
-# 示例 1：当前使用的 Shell（环境变量）
-# echo "shell=${SHELL}"
-
-# 示例 2：当前登录用户
+# 示例 1：当前登录用户（单行）
 # echo "login_user=$(whoami)"
 
-# 示例 3：系统语言/字符集
-# echo "lang=${LANG}"
+# 示例 2：系统运行时间（单行）
+# echo "uptime=$(uptime -p 2>/dev/null || uptime)"
+
+# 示例 3：多行自定义字段（用 BEGIN/END 包裹）
+# BEGIN my_custom
+# my_val=$(date +%s)
+# echo "my_custom=${my_val}"
+# END my_custom
 
 
 # 👇 下面开始写你的自定义字段

@@ -50,11 +50,19 @@ var scriptCmd = &cobra.Command{
 
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+ 	Run: func(cmd *cobra.Command, args []string) {
 		// 处理主机组参数（如 web/all，支持区间展开）
 		config.GlobalFlags.HostInventory = args
+
+		// 读取脚本文件（本机操作，失败立即退出）
 		scriptPath, _ := cmd.Flags().GetString("file")
-		config.GlobalFlags.Parameter["script_file"] = scriptPath
+		content, err := os.ReadFile(scriptPath)
+		if err != nil {
+			Errorf("读取脚本失败: %v", err)
+			os.Exit(exitcode.ParamError)
+		}
+		config.GlobalFlags.Parameter["script_content"] = string(content)
+
 		// 传递脚本参数和环境变量
 		scriptArgs, _ := cmd.Flags().GetString("args")
 		if scriptArgs != "" {
@@ -91,12 +99,7 @@ var scriptCmd = &cobra.Command{
 			os.Exit(exitcode.Success)
 		}
 
-		// 脚本内容安全检查：硬拦截 / 确认
-		content, err := os.ReadFile(scriptPath)
-		if err != nil {
-			Errorf("读取脚本失败: %v", err)
-			os.Exit(exitcode.ParamError)
-		}
+ 		// 脚本内容安全检查：硬拦截 / 确认
 		yes, _ := cmd.Flags().GetBool("yes")
 		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
 		if !enforceCommandSafety(string(content), execHosts, yes, allowDangerous) {
