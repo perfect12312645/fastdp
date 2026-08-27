@@ -22,7 +22,11 @@ var shellCmd = &cobra.Command{
 		}
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+ 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			Errorf("请指定目标主机组或主机\n使用 --help 查看帮助信息\n示例:\n  fastdp shell -a \"uptime\" all\n  fastdp shell -a \"df -h\" web")
+			os.Exit(exitcode.ParamError)
+		}
 		// 处理主机组参数（如 web/all）
 		config.GlobalFlags.HostInventory = args
 		aValue, _ := cmd.Flags().GetString("args")
@@ -90,7 +94,6 @@ var shellCmd = &cobra.Command{
   fastdp shell -a 'rm -rf /tmp/*' master
   fastdp shell -a 'rm -rf /tmp/*' master --yes
 `,
-	Args: cobra.MinimumNArgs(1),
 }
 
 func init() {

@@ -47,7 +47,13 @@ var checkCmd = &cobra.Command{
 		}
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+ 	Run: func(cmd *cobra.Command, args []string) {
+		// 未指定目标主机，给出友好提示
+		if len(args) == 0 {
+			Errorf("请指定目标主机组或主机\n使用 --help 查看帮助信息\n示例:\n  fastdp check all\n  fastdp check web\n  fastdp check 192.168.1.100")
+			os.Exit(exitcode.ParamError)
+		}
+
 		config.GlobalFlags.HostInventory = args
 
 		vertical, _ := cmd.Flags().GetBool("vertical")
@@ -108,7 +114,6 @@ var checkCmd = &cobra.Command{
   fastdp check all -f csv  > report.csv
   fastdp check all -f json > report.json
 `,
-	Args: cobra.MinimumNArgs(1),
 }
 
 func init() {

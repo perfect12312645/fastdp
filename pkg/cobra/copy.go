@@ -26,7 +26,11 @@ var copyCmd = &cobra.Command{
 		}
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+ 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			Errorf("请指定目标主机组或主机\n示例:\n  fastdp copy -s app.conf -d /etc/ web\n  fastdp copy -s config.ini -d /tmp/ 192.168.1.100")
+			os.Exit(exitcode.ParamError)
+		}
 		sValue, _ := cmd.Flags().GetString("source")
 		dValue, _ := cmd.Flags().GetString("dest")
 		// 处理主机组参数（如 web/all）
@@ -60,7 +64,6 @@ var copyCmd = &cobra.Command{
 
   # 推送脚本到指定主机
   fastdp copy -s run.sh -d /tmp/run.sh 192.168.1.101`,
-	Args: cobra.MinimumNArgs(1),
 }
 
 func init() {

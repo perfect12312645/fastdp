@@ -51,6 +51,10 @@ var scriptCmd = &cobra.Command{
 		return nil
 	},
  	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			Errorf("请指定目标主机组或主机\n使用 --help 查看帮助信息\n示例:\n  fastdp script -f run.sh all\n  fastdp script -f check.sh web")
+			os.Exit(exitcode.ParamError)
+		}
 		// 处理主机组参数（如 web/all，支持区间展开）
 		config.GlobalFlags.HostInventory = args
 
@@ -121,7 +125,6 @@ var scriptCmd = &cobra.Command{
   # 执行本地脚本到指定组和IP
   fastdp script -f check.sh master node 192.168.10.100
 `,
-	Args: cobra.MinimumNArgs(1),
 }
 
 // 注册参数

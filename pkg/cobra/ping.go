@@ -16,7 +16,11 @@ var pingCmd = &cobra.Command{
 	Short:         "测试主机连通性",
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	Run: func(cmd *cobra.Command, args []string) {
+ 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			Errorf("请指定目标主机组或主机\n示例:\n  fastdp ping all\n  fastdp ping web\n  fastdp ping 192.168.1.100")
+			os.Exit(exitcode.ParamError)
+		}
 		// 处理主机组参数（如 web/all）
 		config.GlobalFlags.HostInventory = args
 
@@ -37,5 +41,4 @@ var pingCmd = &cobra.Command{
   fastdp ping web
 
   fastdp ping all`,
-	Args: cobra.MinimumNArgs(1),
 }

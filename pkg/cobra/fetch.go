@@ -22,7 +22,11 @@ var fetchCmd = &cobra.Command{
 		}
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+ 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			Errorf("请指定目标主机组或主机\n示例:\n  fastdp fetch -r \"/var/log/messages\" all\n  fastdp fetch -r \"/tmp/*.log\" web")
+			os.Exit(exitcode.ParamError)
+		}
 		// 处理主机组参数（如 web/all）
 		config.GlobalFlags.HostInventory = args
 
@@ -69,7 +73,6 @@ var fetchCmd = &cobra.Command{
   fastdp fetch -r "/tmp/sec-*.log" all
 `,
 
-	Args: cobra.MinimumNArgs(1),
 }
 
 // 注册标志
