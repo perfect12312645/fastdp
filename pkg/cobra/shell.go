@@ -35,9 +35,12 @@ var shellCmd = &cobra.Command{
 		if aggregate != "" {
 			config.GlobalFlags.Parameter["aggregate"] = aggregate
 		}
-		summary, _ := cmd.Flags().GetBool("summary")
+ 		summary, _ := cmd.Flags().GetBool("summary")
 		if summary {
 			config.GlobalFlags.Parameter["summary"] = "true"
+		}
+		if quiet, _ := cmd.Flags().GetBool("quiet"); quiet {
+			config.GlobalFlags.Quiet = true
 		}
 		execHosts, err := GetInfo()
 		if err != nil {
@@ -103,4 +106,5 @@ func init() {
 	shellCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
 	shellCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")
 	shellCmd.Flags().BoolP("summary", "s", false, "汇总模式：只显示失败主机，成功主机折叠为一行")
+	shellCmd.Flags().BoolP("quiet", "q", false, "静默模式：只输出命令原始 stdout，无装饰文本（适合管道和脚本）")
 }

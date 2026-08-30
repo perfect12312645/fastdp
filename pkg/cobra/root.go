@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	Version = "v6.0.0"
+	Version = "v6.1.0"
 )
 var rootCmd = &cobra.Command{
 	Use:   "fastdp",
@@ -65,7 +65,6 @@ var rootCmd = &cobra.Command{
 		config.GlobalFlags.RetryFile, _ = cmd.Flags().GetString("retry-file")
 		config.GlobalFlags.Limit, _ = cmd.Flags().GetString("limit")
 		config.GlobalFlags.Output, _ = cmd.Flags().GetString("output")
-		config.GlobalFlags.Quiet, _ = cmd.Flags().GetBool("quiet")
 		config.GlobalFlags.DryRun, _ = cmd.Flags().GetBool("dry-run")
 		inventoryPath, _ := cmd.Flags().GetString("inventory")
 		if inventoryPath != "" {
@@ -115,7 +114,6 @@ func init() {
 	rootCmd.PersistentFlags().String("retry-file", "", "将失败主机写入文件，便于 --limit @file 重跑")
 	rootCmd.PersistentFlags().String("limit", "", "从文件读取目标主机列表（@file，常用于对失败主机重跑）")
 	rootCmd.PersistentFlags().StringP("output", "o", "text", "输出格式：text（人类阅读友好）/ JSON（结构化，适合脚本和 AI Agent）")
-	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "静默模式：只输出命令原始 stdout，无装饰文本（适合管道、重定向、AI Agent）")
 	rootCmd.PersistentFlags().Bool("dry-run", false, "干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览）")
 
 	// 添加子命令
@@ -303,7 +301,7 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 				if config.GlobalFlags.Quiet {
 					fmt.Print(result.Error)
 				} else {
-					Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
+					Errorf("host:%s 执行失败\nSTDOUT:%s\nSTDERR:%s\n",
 						addr, result.Output, result.Error)
 				}
 			} else {
@@ -471,7 +469,7 @@ func outputResults(addrs []string, results map[string]module.Result) {
 		Errorf("─── 失败主机（%d/%d） ───", len(failedAddrs), len(addrs))
 		for _, addr := range failedAddrs {
 			result := results[addr]
-			Errorf("host:%s 执行失败\nSTDOUT:\n%sSTDERR:%s\n",
+			Errorf("host:%s 执行失败\nSTDOUT:%s\nSTDERR:%s\n",
 				addr, result.Output, result.Error)
 		}
 	}

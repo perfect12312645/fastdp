@@ -60,8 +60,7 @@ fastdp-v6-linux-amd64/
 ├── fastdp              # 主程序（可执行）
 ├── config.toml         # 配置文件模板
 ├── host                # 主机组配置模板
-├── fastdp-check.sh     # 巡检脚本（check 模块使用）
-└── README.txt          # 说明文件
+└── fastdp-check.sh     # 巡检脚本（check 模块使用）
 ```
 
 请选择适合你的安装方式：
@@ -76,9 +75,9 @@ tar -zxvf fastdp-v6-linux-amd64.tar.gz
 cd fastdp-v6-linux-amd64
 
 # 安装到系统路径（需要 sudo）
-sudo cp fastdp /usr/local/bin/
+sudo mv fastdp /usr/local/bin/
 sudo mkdir -p /etc/fastdp
-sudo cp config.toml host fastdp-check.sh /etc/fastdp/
+sudo mv * /etc/fastdp/
 
 # 编辑主机组配置
 sudo vim /etc/fastdp/host
@@ -246,57 +245,23 @@ fastdp [tab][tab]
 ## 快速开始
 
 ```bash
-# 查看帮助
-fastdp --help
-
-# shell：在 web 组执行 uptime
+# 在主机组执行命令
 fastdp shell -a "uptime" web
 
-# shell：多主机组/IP 混合执行
-fastdp shell -a "lsblk" master node 192.168.10.100
+# 复制文件到远程主机
+fastdp copy -s app.conf -d /etc/ web
 
-# copy：复制本地文件到 db 组（自动 MD5 校验 + 权限同步）
-fastdp copy -s ./config.ini -d /etc/app/config.ini db
-
-# fetch：批量拉取远程日志文件
+# 批量拉取远程文件
 fastdp fetch -r "/var/log/messages" all
 
-# script：推送脚本到远程主机并执行
+# 执行远程脚本
 fastdp script -f init.sh db
 
-# ping：检测 all 组主机 SSH 存活状态
+# 检测主机连通性
 fastdp ping all
 
-# check：批量主机环境巡检
+# 环境巡检
 fastdp check all
-
-# 开启调试模式
-fastdp -v shell -a "df -h" web
-
-# 控制执行的并发数量，默认为配置文件中的值
-fastdp -c 10 shell -a "lsblk" web
-
-# 指定主机清单文件 (优先于配置文件)
-fastdp -i ./host shell -a "df -h" gpu
-
-# 单台超时 30 秒，失败重试 2 次
-fastdp -t 30 shell -a "systemctl restart nginx" web
-
-# 静默模式 + 模板变量（只输出结果，无装饰）
-fastdp shell -a 'echo {{.ip}} $(hostname)' all -q
-
-# 直接写入 /etc/hosts（集群初始化场景）
-fastdp shell -a 'echo {{.ip}} $(hostname)' all -q >> /etc/hosts
-
-# 查看 host 文件原值（域名不解析）
-fastdp shell -a 'echo {{.addr}}' all -q
-
-# JSON 输出（适合脚本和 AI Agent 消费）
-fastdp shell -a "uptime" all --output json
-
-# 失败主机写入文件，后续只对失败主机重跑
-fastdp -t 30 --retry-file /tmp/failed.txt shell -a "uptime" all
-fastdp shell -a "uptime" --limit @/tmp/failed.txt all
 ```
 
 ## 模块说明
@@ -307,8 +272,11 @@ fastdp shell -a "uptime" --limit @/tmp/failed.txt all
 
 参数：
 - `-a` / `--args`：要执行的 shell 命令（必需）
+- `--aggregate`：聚合函数：avg/max/min/sum/median/p95/p99/stddev（对命令输出的数字进行跨机聚合）
 - `-y` / `--yes`：危险命令自动确认（CI 场景）
 - `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
+- `-s` / `--summary`：汇总模式（只显示失败主机，成功主机折叠为一行）
+- `-q` / `--quiet`：静默模式（只输出命令原始 stdout，无装饰文本，适合管道和自动化）
 
 ```bash
 # 基础用法
@@ -365,21 +333,38 @@ fastdp shell -a 'rm -rf /tmp/*' master --yes
 
 ### 2. copy 模块
 
-复制本地文件到远程主机，支持 MD5 校验（文件相同则跳过）和权限同步。
+复制本地文件到远程主机，支持 MD5 校验（文件相同则跳过）、权限同步、多文件、目录递归。
 
 参数：
-- `-s` / `--source`：本地源文件路径（必需）
+- `-s` / `--source`：源文件路径（可多次指定）
+- `-r` / `--recursive`：源目录路径（递归复制，可多次指定）
 - `-d` / `--dest`：远程目标路径，需为绝对路径（必需）
+- `--no-keep-dir`：不保留源顶层目录，平铺复制目录内容到目标（默认保留目录结构）
+
+> 复制目录时，目标路径必须以 `/` 结尾
 
 ```bash
-# 推送配置文件到 web 组
+# 单文件复制
 fastdp copy -s app.conf -d /etc/ web
-
-# 推送脚本到指定主机
 fastdp copy -s run.sh -d /tmp/run.sh 192.168.1.101
+
+# 多文件复制
+fastdp copy -s a.conf -s b.sh -s c.py -d /tmp/ all
+
+# 目录递归复制（默认保留源目录名）
+fastdp copy -r ./configs/ -d /etc/app/ all
+# 结果：/etc/app/configs/xxx.yml
+
+# 目录递归复制（平铺，不保留源目录名）
+fastdp copy -r ./configs/ -d /etc/app/ --no-keep-dir all
+# 结果：/etc/app/xxx.yml
+
+# 混合使用
+fastdp copy -s app.conf -r ./scripts/ -d /opt/ all
 ```
 
 ![image-20260529175910671](./assets/copy.png)
+> 大量文件传输推荐使用 rsync
 
 ### 3. fetch 模块
 
@@ -408,16 +393,13 @@ fastdp fetch -r "/tmp/sec?" --dest ./my-download all
 fastdp fetch -r "/tmp/*.log" --no-ip-dir all
 ```
 
+> **后续优化：** 计划支持目录递归拉取和 MD5 幂等性检查（已下载且内容一致的文件自动跳过），适合定时任务场景。大量文件传输推荐使用 rsync。
+
 ![image-20260529175910671](./assets/fetch.png)
 
 ### 4. script 模块
 
 在远程主机上批量执行本地shell脚本。
-
-参数：
-- `-f` / `--file`：本地脚本路径（必需，文本文件，最大 512KB）
-- `-y` / `--yes`：危险命令自动确认（CI 场景）
-- `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
 
 > script 模块执行前会扫描脚本内容，危险命令（如 `rm -rf /`）会触发与 shell 模块相同的安全拦截/确认机制。
 
@@ -427,16 +409,18 @@ fastdp fetch -r "/tmp/*.log" --no-ip-dir all
 - `--env`：传递给脚本的环境变量（格式：`KEY=val KEY2=val2`）
 - `-y` / `--yes`：危险命令自动确认（CI 场景）
 - `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
+- `-q` / `--quiet`：静默模式（只输出脚本原始 stdout，适合管道和自动化）
 
 ```bash
-# 上传脚本并在所有主机执行
+# 基础用法
 fastdp script -f run.sh all
-
-# 执行到指定组和 IP
 fastdp script -f check.sh master node 192.168.1.100
 
 # 传递参数和环境变量
 fastdp script -f init.sh --args "eth0 192.168.1.1" --env "MODE=persist MTU=9000" all
+
+# 静默模式（只输出脚本原始 stdout）
+fastdp script -f check.sh all -q
 ```
 
 ![image-20260529175910671](./assets/script.png)
@@ -458,6 +442,7 @@ fastdp ping all
 - `-g`：竖向格式化输出（类似 mysql \G）
 - `-f`：导出格式，支持 csv / md / html / json
 - `--only`：只检查指定字段（逗号分隔，如 `cpu_cores,cpu_model,mem`）
+- `-l` / `--list-fields`：列出所有可用的检查字段 key
 
 固定输出字段（18+ 标准字段，支持自定义字段）：
 
@@ -626,10 +611,8 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | --timeout     | -t   | 单台执行超时秒数（0=不限制，超时主机标记失败不拖垮整批） | 0 |
 | --retry-file  | -    | 将失败主机写入文件，便于 --limit @file 重跑 | "" |
 | --limit       | -    | 从文件读取目标主机列表（@file，常用于对失败主机重跑） | "" |
-| --output      | -    | 输出格式：text（人类阅读）/ JSON（结构化，适合脚本和 AI Agent） | text |
-| --quiet       | -q   | 静默模式：只输出命令原始 stdout，无装饰文本（适合管道、重定向到文件、AI Agent 消费） | false |
+| --output      | -o   | 输出格式：text（人类阅读）/ JSON（结构化，适合脚本和 AI Agent） | text |
 | --dry-run     | -    | 干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览） | false |
-| --aggregate   | -    | 聚合函数：avg/max/min/sum/median/p95/p99/stddev（对 shell 命令输出的数字进行跨机聚合） | "" |
 | --version     | -V   | 显示版本信息                       | false  |
 | --help        | -h   | 查看帮助信息                       | -      |
 

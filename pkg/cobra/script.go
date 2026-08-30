@@ -76,9 +76,12 @@ var scriptCmd = &cobra.Command{
 		if scriptEnv != "" {
 			config.GlobalFlags.Parameter["script_env"] = scriptEnv
 		}
-		summary, _ := cmd.Flags().GetBool("summary")
+ 		summary, _ := cmd.Flags().GetBool("summary")
 		if summary {
 			config.GlobalFlags.Parameter["summary"] = "true"
+		}
+		if quiet, _ := cmd.Flags().GetBool("quiet"); quiet {
+			config.GlobalFlags.Quiet = true
 		}
 
 		execHosts, err := GetInfo()
@@ -119,11 +122,15 @@ var scriptCmd = &cobra.Command{
 		os.Exit(execute(hostSessions, failedHosts, config.GlobalFlags, mod, "script"))
 	},
 	Example: `
-  # 上传本地脚本并在所有主机执行
+  # 基础用法
   fastdp script -f run.sh all
+  fastdp script -f check.sh master node 192.168.1.100
 
-  # 执行本地脚本到指定组和IP
-  fastdp script -f check.sh master node 192.168.10.100
+  # 传递参数和环境变量
+  fastdp script -f init.sh --args "eth0 192.168.1.1" --env "MODE=persist MTU=9000" all
+
+  # 静默模式（只输出脚本原始 stdout）
+  fastdp script -f check.sh all -q
 `,
 }
 
@@ -137,4 +144,5 @@ func init() {
 	scriptCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
 	scriptCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")
 	scriptCmd.Flags().BoolP("summary", "s", false, "汇总模式：只显示失败主机，成功主机折叠为一行")
+	scriptCmd.Flags().BoolP("quiet", "q", false, "静默模式：只输出命令原始 stdout，无装饰文本（适合管道和脚本）")
 }

@@ -2,6 +2,7 @@ package module
 
 import (
 	"bytes"
+	"encoding/json"
 	"fastdp/pkg/config"
 	. "fastdp/utils"
 	"fmt"
@@ -12,258 +13,283 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/pkg/sftp"
 )
 
-type CopyModule struct {
-}
+// 进度展示阈值：10MB，小于此值不展示进度
+const progressThreshold = 10 * 1024 * 1024
+
+type CopyModule struct{}
 
 type ProgressReader struct {
-	reader        io.Reader                               // 原始文件 Reader
-	totalSize     int64                                   // 文件总大小（字节）
-	current       int64                                   // 当前已传输字节（原子操作计数）
-	host          string                                  // 目标主机地址
-	progressCb    func(host string, current, total int64) // 进度更新回调函数
-	lastPrintTime time.Time                               // 上次打印时间（初始化零值）
+	reader        io.Reader
+	totalSize     int64
+	current       int64
+	host          string
+	progressCb    func(host string, current, total int64)
+	lastPrintTime time.Time
 }
 
-// NewProgressReader 创建 ProgressReader 实例，初始化上次打印时间为零值
 func NewProgressReader(r io.Reader, totalSize int64, host string, cb func(string, int64, int64)) *ProgressReader {
 	return &ProgressReader{
 		reader:        r,
 		totalSize:     totalSize,
 		host:          host,
 		progressCb:    cb,
-		lastPrintTime: time.Time{}, // 零值时间，确保第一次调用必打印
+		lastPrintTime: time.Time{},
 	}
 }
 
-// Read 实现 io.Reader 接口，每次读取后触发进度回调
 func (pr *ProgressReader) Read(p []byte) (int, error) {
-	n, err := pr.reader.Read(p) // 读取数据
+	n, err := pr.reader.Read(p)
 	if n > 0 {
-		atomic.AddInt64(&pr.current, int64(n))           // 原子累加已传输字节
-		pr.progressCb(pr.host, pr.current, pr.totalSize) // 触发回调
+		atomic.AddInt64(&pr.current, int64(n))
+		if pr.progressCb != nil {
+			pr.progressCb(pr.host, pr.current, pr.totalSize)
+		}
 	}
 	return n, err
+}
+
+// MultiFileProgress 多文件总进度追踪
+type MultiFileProgress struct {
+	totalSize     int64
+	current       int64
+	lastPrintTime time.Time
+}
+
+func NewMultiFileProgress(totalSize int64) *MultiFileProgress {
+	return &MultiFileProgress{
+		totalSize:     totalSize,
+		lastPrintTime: time.Time{},
+	}
+}
+
+func (mp *MultiFileProgress) AddTransferred(n int64) {
+	atomic.AddInt64(&mp.current, int64(n))
+}
+
+func (mp *MultiFileProgress) TryPrint(host string) {
+	now := time.Now()
+	if now.Sub(mp.lastPrintTime) >= 3*time.Second || atomic.LoadInt64(&mp.current) >= mp.totalSize {
+		percent := float64(atomic.LoadInt64(&mp.current)) / float64(mp.totalSize) * 100
+		if percent > 100 {
+			percent = 100
+		}
+		fmt.Printf("复制进度 | 主机: %s | 已传输: %.1f%%\n", host, percent)
+		mp.lastPrintTime = now
+	}
 }
 
 func NewCopyModule() Module {
 	return &CopyModule{}
 }
 
-func GetSource(flags *config.Flags) error {
-	// （原有逻辑不变）
-	src := flags.Parameter["source"]
-	dest := flags.Parameter["dest"]
-
-	if !filepath.IsAbs(dest) {
-		return fmt.Errorf("目标文件位置必须输入绝对路径，当前输入为:%s", dest)
-	}
-	srcAbs, err := filepath.Abs(src)
-	if err != nil {
-		return fmt.Errorf("获取源文件失败%s", err.Error())
-	}
-	srcf, err := os.Stat(srcAbs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("源文件不存在: %s", srcAbs)
-		}
-		return fmt.Errorf("获取源文件信息失败: %s", err.Error())
-	}
-	Debugf("源文件名%s", srcf.Name())
-	if srcf.IsDir() {
-		return fmt.Errorf("不支持目录复制: %s", srcAbs)
-	}
-
-	srcMd5, err := FileMD5(srcAbs)
-	if err != nil {
-		return fmt.Errorf("计算源文件md5失败:%s", err.Error())
-	}
-	flags.Parameter["srcFileSize"] = fmt.Sprintf("%d", srcf.Size())
-	flags.Parameter["srcAbsPath"] = srcAbs
-	flags.Parameter["md5"] = srcMd5
-	flags.Parameter["srcFileName"] = srcf.Name()
-	flags.Parameter["srcFileMode"] = fmt.Sprintf("%03o", srcf.Mode()&os.ModePerm)
-
-	return nil
+// fileInfo 文件元数据（与 cobra/copy.go 同步）
+type fileInfo struct {
+	AbsPath      string `json:"abs_path"`
+	RelativePath string `json:"relative_path"`
+	FileName     string `json:"file_name"`
+	Size         string `json:"size"`
+	Md5          string `json:"md5"`
+	Mode         string `json:"mode"`
 }
 
 func (m *CopyModule) Run(hs HostSession, flags *config.Flags) Result {
-	srcAbs := flags.Parameter["srcAbsPath"]
-	dest := flags.Parameter["dest"]
-	srcMd5 := flags.Parameter["md5"]
+	jsonList := flags.Parameter["file_list"]
+	if jsonList == "" {
+		return Result{Success: false, Error: "缺少源文件列表", Change: false}
+	}
+	return m.runMultiFile(hs, flags, jsonList)
+}
 
-	// （目标文件检查逻辑不变）
-	checkCmd := fmt.Sprintf(`
-dest_path=%q
-src_filename=%q
-dest_path=${dest_path%%/}
-if [ -d "$dest_path" ]; then
-  target_path="$dest_path/$src_filename"
-else
-  target_path="$dest_path"
-fi
-if [ -f "$target_path" ]; then
-  destMd5=$(md5sum "$target_path" | awk '{print $1}')
-  if [ "$destMd5" = '%s' ]; then
-    echo -n "SAME"
-  else
-    echo -n "DIFFER"
-  fi
-else
-  echo -n "FILE_NOT_FOUND"
-fi
-`, dest, flags.Parameter["srcFileName"], srcMd5)
-	Debugf("copy模块 | 主机: %s | 开始计算目标文件MD5 | 时间: %v", hs.Addr, time.Now())
-	var checkOut, checkErr bytes.Buffer
-	hs.Session.Stdout = &checkOut
-	hs.Session.Stderr = &checkErr
+// runMultiFile 多文件复制模式（使用 SFTP）
+func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList string) Result {
+	var fileList []fileInfo
+	if err := json.Unmarshal([]byte(jsonList), &fileList); err != nil {
+		return Result{Success: false, Error: "解析文件列表失败: " + err.Error(), Change: false}
+	}
 
-	if err := hs.Session.Run(checkCmd); err != nil {
-		return Result{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Sprintf("Failed to check destination file: %v\n%s", err, checkErr.String()),
-			Change:  false,
+	destRoot := strings.TrimRight(flags.Parameter["dest"], "/")
+
+	// 计算总大小
+	var totalSize int64
+	for _, fi := range fileList {
+		size, _ := strconv.ParseInt(fi.Size, 10, 64)
+		totalSize += size
+	}
+
+ 	multiProgress := NewMultiFileProgress(totalSize)
+	quiet := flags.Parameter["quiet"] == "true"
+	showProgress := !quiet && totalSize >= progressThreshold
+
+ 	successCount := 0
+	skipCount := 0
+	failCount := 0
+	var failMsgs []string
+
+	// 创建 SFTP 客户端
+	sftpClient, err := sftp.NewClient(hs.Client)
+	if err != nil {
+		return Result{Success: false, Error: "创建 SFTP 客户端失败: " + err.Error(), Change: false}
+	}
+	defer sftpClient.Close()
+
+	// 单文件时预计算目标路径（避免循环内重复判断）
+	var singleFileTarget string
+	if len(fileList) == 1 {
+		dest := flags.Parameter["dest"]
+		fi := fileList[0]
+		if strings.HasSuffix(dest, "/") {
+			singleFileTarget = strings.TrimRight(dest, "/") + "/" + fi.FileName
+		} else if remoteInfo, err := sftpClient.Stat(dest); err == nil && remoteInfo.IsDir() {
+			singleFileTarget = dest + "/" + fi.FileName
+		} else {
+			singleFileTarget = dest
 		}
 	}
 
-	destContent := checkOut.String()
-	destContentTrimmed := strings.TrimSpace(destContent)
-	Debugf("copy模块 | 主机: %s | 远程文件状态返回: %s", hs.Addr, destContentTrimmed)
-	changed := false
-	Debugf("copy模块 | 主机: %s | 完成计算目标文件MD5 | 时间: %v", hs.Addr, time.Now())
+	for idx, fi := range fileList {
+		// 构造目标路径
+		var targetPath string
+		if len(fileList) == 1 {
+			targetPath = singleFileTarget
+		} else {
+			targetPath = destRoot + "/" + fi.RelativePath
+		}
+		targetDir := filepath.Dir(targetPath)
 
-	if destContentTrimmed == "FILE_NOT_FOUND" || destContentTrimmed == "DIFFER" {
-		changed = true
-		permissionStr := flags.Parameter["srcFileMode"]
-		writeCmd := fmt.Sprintf(`
-dest_path=%q
-src_filename=%q
-dest_path=${dest_path%%/}
-if [ -d "$dest_path" ]; then
-  target_path="$dest_path/$src_filename"
-else
-  target_path="$dest_path"
-fi
-target_dir=$(dirname "$target_path")
-tmpFile="$target_dir/fastdp_copy_$(date +%%s%%N)"
-mkdir -p "$target_dir"
-cat > "$tmpFile" && chmod %s "$tmpFile" && mv "$tmpFile" "$target_path"
-`, dest, flags.Parameter["srcFileName"], permissionStr)
-		Debugf("copy模块 | 主机: %s | 开始传输文件 | 源: %s | 目标: %s", hs.Addr, srcAbs, dest)
+		// MD5 检查
+		checkCmd := fmt.Sprintf(`read destMd5 _ <<< "$(md5sum %q 2>/dev/null)" && echo "$destMd5" || echo "NOT_FOUND"`, targetPath)
 
-		// 打开源文件
-		srcFile, err := os.Open(srcAbs)
+		var checkOut, checkErr bytes.Buffer
+
+		if idx == 0 {
+			hs.Session.Stdout = &checkOut
+			hs.Session.Stderr = &checkErr
+			if err := hs.Session.Run(checkCmd); err != nil {
+				Debugf("copy模块 | %s: MD5 检查失败 %v", fi.FileName, err)
+				failCount++
+				continue
+			}
+		} else {
+			checkSession, err := hs.Client.NewSession()
+			if err != nil {
+				Debugf("copy模块 | %s: 创建检查会话失败 %v", fi.FileName, err)
+				failCount++
+				continue
+			}
+			checkSession.Stdout = &checkOut
+			checkSession.Stderr = &checkErr
+			if err := checkSession.Run(checkCmd); err != nil {
+				Debugf("copy模块 | %s: MD5 检查失败 %v", fi.FileName, err)
+				failCount++
+				checkSession.Close()
+				continue
+			}
+			checkSession.Close()
+		}
+
+		remoteMd5 := strings.TrimSpace(checkOut.String())
+		if remoteMd5 == fi.Md5 {
+			skipCount++
+			continue
+		}
+
+ 		// 需要复制 - 使用 SFTP
+		if err := sftpClient.MkdirAll(targetDir); err != nil {
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建目录失败 %v", fi.FileName, err))
+			failCount++
+			continue
+		}
+
+		Debugf("copy模块 | %s: 开始传输到 %s", fi.FileName, targetPath)
+		srcFile, err := os.Open(fi.AbsPath)
 		if err != nil {
-			return Result{
-				Success: false,
-				Error:   fmt.Sprintf("打开源文件失败: %v", err),
-			}
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 打开源文件失败 %v", fi.FileName, err))
+			failCount++
+			continue
 		}
-		defer srcFile.Close()
 
-		// 解析文件总大小
-		totalSize, err := strconv.ParseInt(flags.Parameter["srcFileSize"], 10, 64)
+		dstFile, err := sftpClient.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 		if err != nil {
-			return Result{
-				Success: false,
-				Error:   fmt.Sprintf("解析文件大小失败: %v", err),
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建远程文件失败 %v", fi.FileName, err))
+			srcFile.Close()
+			failCount++
+			continue
+		}
+
+		fileSize, _ := strconv.ParseInt(fi.Size, 10, 64)
+
+		var reader io.Reader = srcFile
+		if showProgress {
+			reader = &progressTrackerReader{
+				reader:   srcFile,
+				fileSize: fileSize,
+				progress: multiProgress,
+				host:     hs.Addr,
 			}
 		}
 
-		// 创建带时间间隔控制的进度阅读器
-		progressReader := NewProgressReader(srcFile, totalSize, hs.Addr, nil)
-		// 定义基于3秒间隔的回调函数（闭包捕获progressReader，用于更新lastPrintTime）
-		progressReader.progressCb = func(host string, current, total int64) {
-			if total == 0 {
-				return
-			}
-			now := time.Now()
-			// 满足以下条件之一则打印：
-			// 1. 距离上次打印已超过3秒；2. 文件传输完成（current == total）
-			if now.Sub(progressReader.lastPrintTime) >= 3*time.Second || current == total {
-				percent := float64(current) / float64(total) * 100
-				fmt.Printf("复制进度 | 主机: %s | 已传输: %.2f%% (%d/%d bytes)\n",
-					host, percent, current, total)
-				progressReader.lastPrintTime = now // 更新上次打印时间
-			}
-		}
+		_, err = io.Copy(dstFile, reader)
+		srcFile.Close()
+		dstFile.Close()
 
-		// 执行SSH传输
-		session, err := hs.Client.NewSession()
 		if err != nil {
-			return Result{
-				Success: false,
-				Output:  "",
-				Error:   fmt.Sprintf("Failed to create new SSH session: %v", err),
-				Change:  false,
-			}
-		}
-		defer session.Close()
-
-		stdin, err := session.StdinPipe()
-		if err != nil {
-			return Result{
-				Success: false,
-				Output:  "",
-				Error:   fmt.Sprintf("Failed to get stdin pipe: %v", err),
-				Change:  false,
-			}
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 传输失败 %v", fi.FileName, err))
+			failCount++
+			continue
 		}
 
-		var outBuf, errBuf bytes.Buffer
-		session.Stdout = &outBuf
-		session.Stderr = &errBuf
-
-		if err := session.Start(writeCmd); err != nil {
-			return Result{
-				Success: false,
-				Output:  "",
-				Error:   fmt.Sprintf("Failed to start write command: %v", err),
-				Change:  false,
-			}
+		// 设置权限
+		mode, _ := strconv.ParseUint(fi.Mode, 8, 32)
+		if err := sftpClient.Chmod(targetPath, os.FileMode(mode)); err != nil {
+			Debugf("copy模块 | %s: 设置权限失败 %v", fi.FileName, err)
 		}
 
-		// 流式传输文件内容（触发进度回调）
-		_, err = io.Copy(stdin, progressReader)
-		if err != nil {
-			return Result{
-				Success: false,
-				Error:   fmt.Sprintf("写入文件内容失败: %v", err),
-			}
-		}
-		stdin.Close()
+		successCount++
+	}
 
-		Debugf("copy模块 | 主机: %s | 完成文件传输写入 | 等待远程处理结果", hs.Addr)
-		if err := session.Wait(); err != nil {
-			return Result{
-				Success: false,
-				Output:  outBuf.String(),
-				Error:   fmt.Sprintf("%s\n%s", errBuf.String(), err.Error()),
-				Change:  false,
-			}
+	// 单文件时保持原有输出格式
+	if len(fileList) == 1 {
+		fi := fileList[0]
+		if successCount == 1 {
+			return Result{Success: true, Output: fmt.Sprintf("已成功复制 %s 到 %s（内容有更新）", fi.AbsPath, singleFileTarget), Change: true}
+		} else if skipCount == 1 {
+			return Result{Success: true, Output: fmt.Sprintf("文件 %s 与远程 %s 内容一致，无需复制", fi.AbsPath, singleFileTarget), Change: false}
 		}
-		return Result{
-			Success: true,
-			Output:  fmt.Sprintf("已成功复制 %s 到 %s（内容有更新）", srcAbs, dest),
-			Error:   "",
-			Change:  changed,
-		}
-	} else if destContentTrimmed == "SAME" {
-		return Result{
-			Success: true,
-			Output:  fmt.Sprintf("文件 %s 与远程 %s 内容一致，无需复制", srcAbs, dest),
-			Error:   "",
-			Change:  changed,
+		// 失败时返回具体错误
+		if len(failMsgs) > 0 {
+			return Result{Success: false, Output: "", Error: failMsgs[0], Change: false}
 		}
 	}
+
 	return Result{
-		Success: false,
-		Output:  "",
-		Error:   "未预期的远程文件状态: " + destContent,
-		Change:  false,
+		Success: failCount == 0,
+		Output:  fmt.Sprintf("复制完成：%d 个文件复制成功，%d 个跳过（内容一致），%d 个失败", successCount, skipCount, failCount),
+		Error:   strings.Join(failMsgs, "\n"),
+		Change:  successCount > 0,
 	}
+}
+
+// progressTrackerReader 追踪多文件总进度
+type progressTrackerReader struct {
+	reader   io.Reader
+	fileSize int64
+	current  int64
+	progress *MultiFileProgress
+	host     string
+}
+
+func (r *progressTrackerReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		atomic.AddInt64(&r.current, int64(n))
+		r.progress.AddTransferred(int64(n))
+		r.progress.TryPrint(r.host)
+	}
+	return n, err
 }
 
 func init() {

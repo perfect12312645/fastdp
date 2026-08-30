@@ -71,7 +71,7 @@ build_tar() {
 
         PKG_DIR="fastdp-$VERSION-$GOOS-$GOARCH"
         mkdir -p $PKG_DIR
-        cp -a fastdp config.toml host fastdp-check.sh README.txt $PKG_DIR/ 2>/dev/null || true
+        cp -a fastdp config.toml host fastdp-check.sh $PKG_DIR/ 2>/dev/null || true
         chmod 755 $PKG_DIR/fastdp
         tar -zcvf "../$OUTPUT_DIR/$PKG_DIR.tar.gz" $PKG_DIR
         rm -rf $PKG_DIR
@@ -105,7 +105,7 @@ build_rpm() {
 
     cp fastdp $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/
     chmod 755 $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/fastdp
-    cp config.toml host fastdp-check.sh README.txt $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/ 2>/dev/null || true
+    cp config.toml host fastdp-check.sh $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/ 2>/dev/null || true
 
 cat > $RPM_DIR/SPECS/fastdp.spec <<EOF
 Name: fastdp
@@ -163,7 +163,7 @@ build_deb() {
     CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -o $DEB_DIR/usr/local/bin/fastdp -ldflags "-w -s" cmd/main.go
     chmod 755 $DEB_DIR/usr/local/bin/fastdp
 
-    cp config.toml host fastdp-check.sh README.txt $DEB_DIR/etc/fastdp/ 2>/dev/null || true
+    cp config.toml host fastdp-check.sh $DEB_DIR/etc/fastdp/ 2>/dev/null || true
 
     # 关键：DEB 架构必须是 amd64 / arm64
     cat > $DEB_DIR/DEBIAN/control <<EOF
