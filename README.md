@@ -1,5 +1,6 @@
 # fastdp
-轻量级 Ansible 风格运维工具，支持在指定主机组上执行批量运维操作，提供多模块管理（shell 命令执行、文件复制、文件拉取、远程脚本、主机连通性检测、环境巡检等）。
+轻量级、单二进制、无依赖的批量运维工具。在”够用就好”的尺度下，用 Go 协程的并发优势替代 Ansible 的 Python + SSH 管道开销，专注于高频运维场景（命令执行、文件传输、状态巡检）的秒级响应。
+> **fastdp 不是 Ansible 完全替代品。** 它没有 playbook、没有 facts gathering、没有变量继承体系。如果你需要复杂编排（roles、templates、idempotent modules），请使用 [Ansible](https://www.ansible.com/)。fastdp 适合"100 台机器跑条命令看结果"这种短平快的即时操作场景。
 
 ## 功能特点
 - 支持 6 大模块操作（shell / copy / fetch / script / ping / check）
@@ -7,6 +8,8 @@
 - 并发连接控制，基于 Go 协程实现高效调度
 - 支持 SSH 密码认证和密钥认证（自动查找私钥）
 - 灵活的配置文件多级加载
+- AI Agent 友好，让 fastdp 成为 AI Agent（Claude Code、Cursor、OpenCode 等）管理多台机器时的首选工具
+- 简单易用，学习成本低
 
 ## 性能对比
 
