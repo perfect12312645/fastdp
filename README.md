@@ -44,19 +44,30 @@
 
 ### 下载发行包
 
+> 最新版本见 [Gitee Releases](https://gitee.com/zhao-pengfei2/fastdp/releases) | [GitHub Releases](https://github.com/perfect12312645/fastdp/releases)
+
 #### tar.gz 包（Linux / macOS 通用）
 
 | 平台 | 架构 | 下载地址 |
 |------|------|---------|
-| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-linux-amd64.tar.gz) |
-| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-linux-arm64.tar.gz) |
-| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-darwin-amd64.tar.gz) |
-| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-darwin-arm64.tar.gz) |
+| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.tar.gz) |
+| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-arm64.tar.gz) |
+| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-amd64.tar.gz) |
+| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-arm64.tar.gz) |
+
+#### RPM / DEB 包
+
+| 平台 | 架构 | 包类型 | 下载地址 |
+|------|------|--------|---------|
+| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm) |
+| Linux | x86_64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.deb) |
+
+> **注意：** RPM 包暂为 v6 旧版本，v6.1.0 RPM 包后续提供。DEB 包已更新到 v6.1.0。
 
 tar.gz 包内容：
 
 ```
-fastdp-v6-linux-amd64/
+fastdp-v6.1.0-linux-amd64/
 ├── fastdp              # 主程序（可执行）
 ├── config.toml         # 配置文件模板
 ├── host                # 主机组配置模板
@@ -64,15 +75,53 @@ fastdp-v6-linux-amd64/
 ```
 
 请选择适合你的安装方式：
+### 方式一：RPM / DEB 包（自动系统级安装，需 root）
 
-### 方式一：系统级安装（推荐 root 用户使用）
+#### RPM 包（CentOS / Rocky / openEuler 等）
+
+> **注意**：包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
+
+```bash
+# 安装（需要 root 权限）
+sudo rpm -ivh fastdp-6-1.ky10.x86_64.rpm
+
+# 安装完成后即可使用
+fastdp --help
+```
+
+#### DEB 包（Ubuntu / Debian 等）
+
+```bash
+# 安装（需要 root 权限）
+sudo dpkg -i fastdp-v6.1.0-linux-amd64.deb
+
+# 安装完成后即可使用
+fastdp --help
+```
+
+RPM/DEB 安装后，二进制位于 `/usr/local/bin/`，配置文件位于 `/etc/fastdp/`。与方式二相同，默认以 root 身份执行。
+
+普通用户如需自定义配置，可复制到家目录（配置加载时家目录优先级最高）：
+
+```bash
+mkdir -p ~/.fastdp
+cp /etc/fastdp/config.toml ~/.fastdp/
+cp /etc/fastdp/host ~/.fastdp/
+cp /etc/fastdp/fastdp-check.sh ~/.fastdp/
+vim ~/.fastdp/config.toml
+# 将 host_inventory 的值改成家目录的绝对路径，如：
+# host_inventory = "/home/你的用户名/.fastdp/host"
+```
+### 方式二：tar.gz 包安装
+
+#### root用户系统级安装
 
 ```bash
 # 解压
-tar -zxvf fastdp-v6-linux-amd64.tar.gz
+tar -zxvf fastdp-v6.1.0-linux-amd64.tar.gz
 
 # 进入目录
-cd fastdp-v6-linux-amd64
+cd fastdp-v6.1.0-linux-amd64
 
 # 安装到系统路径（需要 sudo）
 sudo mv fastdp /usr/local/bin/
@@ -86,14 +135,14 @@ sudo vim /etc/fastdp/host
 sudo fastdp --help
 ```
 
-### 方式二：用户级安装（无需 root）
+#### 普通用户安装（无需 root）
 
 ```bash
 # 解压
-tar -zxvf fastdp-v6-linux-amd64.tar.gz
+tar -zxvf fastdp-v6.1.0-linux-amd64.tar.gz
 
 # 进入目录
-cd fastdp-v6-linux-amd64
+cd fastdp-v6.1.0-linux-amd64
 
 # 复制到家目录
 mkdir -p ~/.fastdp/bin
@@ -115,53 +164,6 @@ vim ~/.fastdp/host
 fastdp --help
 ```
 
-### 方式三：RPM / DEB 包（自动系统级安装，需 root）
-
-#### RPM 包（CentOS / Rocky / openEuler 等）
-
-> **注意**：包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
-
-```bash
-# 下载（Gitee）
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm
-# 或 GitHub
-wget https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm
-
-# 安装（需要 root 权限）
-sudo rpm -ivh fastdp-6-1.ky10.x86_64.rpm
-
-# 安装完成后即可使用
-fastdp --help
-```
-
-#### DEB 包（Ubuntu / Debian 等）
-
-```bash
-# 下载（Gitee）
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-v6-linux-amd64.deb
-# 或 GitHub
-wget https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-v6-linux-amd64.deb
-
-# 安装（需要 root 权限）
-sudo dpkg -i fastdp-v6-linux-amd64.deb
-
-# 安装完成后即可使用
-fastdp --help
-```
-
-RPM/DEB 安装后，二进制位于 `/usr/local/bin/`，配置文件位于 `/etc/fastdp/`。与方式一相同，默认以 root 身份执行。
-
-普通用户如需自定义配置，可复制到家目录（配置加载时家目录优先级最高）：
-
-```bash
-mkdir -p ~/.fastdp
-cp /etc/fastdp/config.toml ~/.fastdp/
-cp /etc/fastdp/host ~/.fastdp/
-cp /etc/fastdp/fastdp-check.sh ~/.fastdp/
-vim ~/.fastdp/config.toml
-# 将 host_inventory 的值改成家目录的绝对路径，如：
-# host_inventory = "/home/你的用户名/.fastdp/host"
-```
 
 ### 从源码编译
 
@@ -177,9 +179,9 @@ sudo cp fastdp /usr/local/bin/
 
 # 或使用构建脚本打发布包（自动下载源码并构建 tar.gz / rpm / deb）
 # Gitee
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/build.sh
+wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/build.sh
 # 或 GitHub
-wget https://github.com/perfect12312645/fastdp/releases/download/v6/build.sh
+wget https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/build.sh
 chmod +x build.sh
 ./build.sh
 ```
@@ -199,48 +201,7 @@ chmod +x build.sh
 2. /etc/fastdp/fastdp-check.sh（系统默认）
 ```
 
-## 命令补全
 
-### Zsh（macOS / Linux）
-
-```bash
-# 查看 $FPATH 是否包含补全目录
-echo $FPATH
-
-# macOS 安装 zsh-completions
-brew install zsh-completions
-
-# 安装 fastdp 补全（如目录不存在需先 mkdir -p）
-sudo mkdir -p /usr/local/share/zsh/site-functions
-sudo fastdp completion zsh > /usr/local/share/zsh/site-functions/_fastdp
-
-# ~/.zshrc 文件中确保有下面这两行
-autoload -Uz compinit
-compinit
-
-# 生效
-source ~/.zshrc
-
-# 验证
-fastdp [tab][tab]
-```
-
-### Bash（Linux）
-
-```bash
-# linux 安装 bash-completions（rpm系示例）
-yum -y install bash-completion
-
-# 生成并安装补全脚本
-fastdp completion bash > /usr/local/etc/bash_completion.d/fastdp
-chmod +r /usr/local/etc/bash_completion.d/fastdp
-
-# 重开终端或重新加载
-source ~/.bash_profile
-
-# 验证
-fastdp [tab][tab]
-```
 
 ## 快速开始
 
@@ -659,7 +620,48 @@ fastdp copy -s a.conf -d /tmp/ 'node-[100:102]'
 > **引号说明**：`[...]` 是 shell 的 glob 语法，**必须加引号**——bash 下若当前目录恰好有同名文件会被静默替换成错误值，zsh 下直接报 `no matches found`。host 文件中使用则无需引号。
 
 > 区间展开的详细语法（步长、零填充、参数覆盖）见 `host` 模板文件注释与[主机组配置](#主机组配置)章节。
+## 命令补全配置
 
+### Zsh（macOS / Linux）
+
+```bash
+# 查看 $FPATH 是否包含补全目录
+echo $FPATH
+
+# macOS 安装 zsh-completions
+brew install zsh-completions
+
+# 安装 fastdp 补全（如目录不存在需先 mkdir -p）
+sudo mkdir -p /usr/local/share/zsh/site-functions
+sudo fastdp completion zsh > /usr/local/share/zsh/site-functions/_fastdp
+
+# ~/.zshrc 文件中确保有下面这两行
+autoload -Uz compinit
+compinit
+
+# 生效
+source ~/.zshrc
+
+# 验证
+fastdp [tab][tab]
+```
+
+### Bash（Linux）
+
+```bash
+# linux 安装 bash-completions（rpm系示例）
+yum -y install bash-completion
+
+# 生成并安装补全脚本
+fastdp completion bash > /usr/local/etc/bash_completion.d/fastdp
+chmod +r /usr/local/etc/bash_completion.d/fastdp
+
+# 重开终端或重新加载
+source ~/.bash_profile
+
+# 验证
+fastdp [tab][tab]
+```
 ## 注意事项
 
 1. **主机组配置**：

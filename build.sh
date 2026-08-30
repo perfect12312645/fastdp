@@ -2,7 +2,7 @@
 set -e
 
 # ====================== 【可配置变量】 ======================
-VERSION="v6"
+VERSION="v6.1.0"
 REPO_URL="https://gitee.com/zhao-pengfei2/fastdp.git"
 BUILD_DIR="fastdp-build"
 OUTPUT_DIR="releases"
