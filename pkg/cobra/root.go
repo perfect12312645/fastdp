@@ -316,7 +316,7 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 	}
 
 	if flags.Parameter["aggregate"] == "" || !config.GlobalFlags.Quiet {
-		outputResults(addrs, results)
+		outputResults(addrs, results, flags.DryRun)
 	}
 	writeRetryFile(flags, results, addrs)
 	computeAggregate(flags, addrs, results)
@@ -439,7 +439,7 @@ func runWithTimeout(mod module.Module, hs HostSession, flags *config.Flags, time
 	}
 }
 
-func outputResults(addrs []string, results map[string]module.Result) {
+func outputResults(addrs []string, results map[string]module.Result, dryRun bool) {
 	if config.GlobalFlags.Quiet {
 		for _, addr := range addrs {
 			fmt.Print(results[addr].Output)
@@ -458,8 +458,10 @@ func outputResults(addrs []string, results map[string]module.Result) {
 
 	for _, addr := range successAddrs {
 		result := results[addr]
-		if result.Change {
+ 		if result.Change {
 			Changedf("host:%s 执行成功 output:\n%s", addr, result.Output)
+		} else if dryRun {
+			Unchangedf("host:%s [dry-run] 预览:\n%s", addr, result.Output)
 		} else {
 			Unchangedf("host:%s 执行成功 output:\n%s", addr, result.Output)
 		}

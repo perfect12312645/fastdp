@@ -4,12 +4,14 @@ import (
 	"fastdp/pkg/config"
 	. "fastdp/utils"
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/progress"
-	"github.com/pkg/sftp"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+
+	"github.com/jedib0t/go-pretty/v6/progress"
+	"github.com/pkg/sftp"
 )
 
 // ===================== 全局进度条（单例，所有主机共享）=====================
@@ -58,9 +60,10 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 	if localDest == "" {
 		localDest = "./fastdp-fetch"
 	}
+	dryRun := config.GlobalFlags.DryRun
+
 	// 2. 创建 SFTP 客户端
 	sftpClient, err := sftp.NewClient(hs.Client)
-
 	if err != nil {
 		return Result{
 			Success: false,
@@ -86,6 +89,27 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 		return Result{
 			Success: true,
 			Output:  "未匹配到任何文件",
+			Error:   "",
+			Change:  false,
+		}
+	}
+
+	// dry-run 模式：只显示会下载的文件，不实际下载
+	if dryRun {
+		var preview []string
+		for _, f := range files {
+			filename := filepath.Base(f)
+			var localFile string
+			if noIpDir == "true" {
+				localFile = filepath.Join(localDest, fmt.Sprintf("%s_%s", hs.Addr, filename))
+			} else {
+				localFile = filepath.Join(localDest, hs.Addr, filename)
+			}
+			preview = append(preview, fmt.Sprintf("%s → %s", f, localFile))
+		}
+		return Result{
+			Success: true,
+			Output:  strings.Join(preview, "\n"),
 			Error:   "",
 			Change:  false,
 		}

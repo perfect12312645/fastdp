@@ -120,14 +120,16 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		totalSize += size
 	}
 
- 	multiProgress := NewMultiFileProgress(totalSize)
+	multiProgress := NewMultiFileProgress(totalSize)
 	quiet := flags.Parameter["quiet"] == "true"
 	showProgress := !quiet && totalSize >= progressThreshold
+	dryRun := config.GlobalFlags.DryRun
 
- 	successCount := 0
+	successCount := 0
 	skipCount := 0
 	failCount := 0
 	var failMsgs []string
+	var dryRunMsgs []string
 
 	// 创建 SFTP 客户端
 	sftpClient, err := sftp.NewClient(hs.Client)
@@ -194,10 +196,20 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		remoteMd5 := strings.TrimSpace(checkOut.String())
 		if remoteMd5 == fi.Md5 {
 			skipCount++
+			if dryRun {
+				dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（内容一致，将跳过）", fi.AbsPath, targetPath))
+			}
 			continue
 		}
 
- 		// 需要复制 - 使用 SFTP
+		// dry-run 模式：只输出预览，不实际复制
+		if dryRun {
+			dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（将复制）", fi.AbsPath, targetPath))
+			successCount++
+			continue
+		}
+
+		// 需要复制 - 使用 SFTP
 		if err := sftpClient.MkdirAll(targetDir); err != nil {
 			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建目录失败 %v", fi.FileName, err))
 			failCount++
@@ -249,6 +261,15 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		}
 
 		successCount++
+	}
+
+	// dry-run 模式：返回预览信息
+	if dryRun {
+		return Result{
+			Success: true,
+			Output:  strings.Join(dryRunMsgs, "\n"),
+			Change:  false,
+		}
 	}
 
 	// 单文件时保持原有输出格式

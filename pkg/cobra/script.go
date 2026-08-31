@@ -72,8 +72,15 @@ var scriptCmd = &cobra.Command{
 		if scriptArgs != "" {
 			config.GlobalFlags.Parameter["script_args"] = scriptArgs
 		}
-		scriptEnv, _ := cmd.Flags().GetString("env")
+ 		scriptEnv, _ := cmd.Flags().GetString("env")
 		if scriptEnv != "" {
+			// 验证环境变量格式必须为 KEY=VALUE
+			for _, pair := range strings.Fields(scriptEnv) {
+				if !strings.Contains(pair, "=") {
+					Errorf("环境变量格式错误: %q，必须为 KEY=VALUE 格式（如 MODE=persist）", pair)
+					os.Exit(exitcode.ParamError)
+				}
+			}
 			config.GlobalFlags.Parameter["script_env"] = scriptEnv
 		}
  		summary, _ := cmd.Flags().GetBool("summary")
