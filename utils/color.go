@@ -53,3 +53,27 @@ func Debugf(format string, v ...interface{}) {
 		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", v...)
 	}
 }
+
+// SummaryLine 输出成功/失败汇总行（带颜色，非终端时自动去除）
+func SummaryLine(okCount, failCount, total int) string {
+	if isTerminal() {
+		line := fmt.Sprintf("\033[32m[OK] %d/%d 成功\033[0m", okCount, total)
+		if failCount > 0 {
+			line += fmt.Sprintf("  \033[31m[FAIL] %d/%d 失败\033[0m", failCount, total)
+		}
+		return line
+	}
+	line := fmt.Sprintf("[OK] %d/%d 成功", okCount, total)
+	if failCount > 0 {
+		line += fmt.Sprintf("  [FAIL] %d/%d 失败", failCount, total)
+	}
+	return line
+}
+
+// HostHeader 输出主机头部信息（带颜色，非终端时自动去除）
+func HostHeader(host string) string {
+	if isTerminal() {
+		return fmt.Sprintf("\n\033[1;34m===== %s =====\033[0m\n", host)
+	}
+	return fmt.Sprintf("\n===== %s =====\n", host)
+}

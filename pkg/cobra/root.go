@@ -292,25 +292,22 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 		return exitcode.Success
 	}
 
-	if isSummary {
+ 	// -q 优先于 -s：当 -q 存在时，跳过汇总模式，走原始输出路径
+	if isSummary && !config.GlobalFlags.Quiet {
 		// 汇总模式输出
 		okCount := 0
+		failCount := 0
 		for _, addr := range addrs {
 			result := results[addr]
 			if !result.Success {
-				if config.GlobalFlags.Quiet {
-					fmt.Print(result.Error)
-				} else {
-					Errorf("host:%s 执行失败\nSTDOUT:%s\nSTDERR:%s\n",
-						addr, result.Output, result.Error)
-				}
+				failCount++
+				Errorf("host:%s 执行失败\nSTDOUT:%s\nSTDERR:%s\n",
+					addr, result.Output, result.Error)
 			} else {
 				okCount++
 			}
 		}
-		if okCount > 0 && !config.GlobalFlags.Quiet {
-			fmt.Printf("\033[32m✅ %d/%d 成功\033[0m\n", okCount, len(addrs))
-		}
+		fmt.Printf("%s\n", SummaryLine(okCount, failCount, len(addrs)))
 		writeRetryFile(flags, results, addrs)
 		return computeExitCode(failedHosts, results)
 	}
@@ -476,11 +473,7 @@ func outputResults(addrs []string, results map[string]module.Result, dryRun bool
 		}
 	}
 
-	fmt.Printf("\033[32m✅ %d/%d 成功\033[0m", len(successAddrs), len(addrs))
-	if len(failedAddrs) > 0 {
-		fmt.Printf("  \033[31m❌ %d/%d 失败\033[0m", len(failedAddrs), len(addrs))
-	}
-	fmt.Println()
+	fmt.Println(SummaryLine(len(successAddrs), len(failedAddrs), len(addrs)))
 }
 
 type jsonResult struct {
@@ -638,7 +631,7 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 			}
 
 			data := hostDataCache[ip]
-			fmt.Printf("\n\033[1;34m===== %s =====\033[0m\n", ip)
+ 			fmt.Print(HostHeader(ip))
 
 			// 1. 输出标准字段
 			for _, f := range standardFields {
