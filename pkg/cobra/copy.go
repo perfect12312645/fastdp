@@ -55,7 +55,7 @@ var copyCmd = &cobra.Command{
 			os.Exit(exitcode.ParamError)
 		}
 
- 		noKeepDir, _ := cmd.Flags().GetBool("no-keep-dir")
+		noKeepDir, _ := cmd.Flags().GetBool("no-keep-dir")
 		quiet, _ := cmd.Flags().GetBool("quiet")
 
 		// 收集所有源文件
@@ -65,7 +65,7 @@ var copyCmd = &cobra.Command{
 			os.Exit(exitcode.ParamError)
 		}
 
- 		// 处理主机组参数
+		// 处理主机组参数
 		config.GlobalFlags.HostInventory = args
 		config.GlobalFlags.Parameter["dest"] = dValue
 		config.GlobalFlags.Parameter["quiet"] = strconv.FormatBool(quiet)
@@ -96,6 +96,7 @@ var copyCmd = &cobra.Command{
   # 目录递归复制（默认保留源目录名）
   fastdp copy -r ./configs/ -d /etc/app/ all
   # 结果：/etc/app/configs/xxx.yml
+  # 大量文件场景建议使用 rsync，fastdp 适合中小规模文件传输。
 
   # 目录递归复制（平铺，不保留源目录名）
   fastdp copy -r ./configs/ -d /etc/app/ --no-keep-dir all
@@ -175,7 +176,7 @@ func collectSourceFiles(sources []string, recursive []string, noKeepDir bool) ([
 			return nil, fmt.Errorf("%s 不是目录", dir)
 		}
 
- 		// 计算相对路径时的根目录
+		// 计算相对路径时的根目录
 		// keepDir=true (默认): 相对路径包含源目录名（如 test_keep/sub/file.txt）
 		// no-keep-dir: 相对路径不包含源目录名（如 sub/file.txt）
 		relRoot := filepath.Dir(abs)
