@@ -104,7 +104,7 @@ func (m *CopyModule) Run(hs HostSession, flags *config.Flags) Result {
 	return m.runMultiFile(hs, flags, jsonList)
 }
 
-// runMultiFile 多文件复制模式（使用 SFTP）
+// runMultiFile 多文件复制模式（两阶段单 channel，兼容 H3C MaxSessions=1）
 func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList string) Result {
 	var fileList []fileInfo
 	if err := json.Unmarshal([]byte(jsonList), &fileList); err != nil {
@@ -112,128 +112,160 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 	}
 
 	destRoot := strings.TrimRight(flags.Parameter["dest"], "/")
+	dryRun := config.GlobalFlags.DryRun
+	quiet := flags.Parameter["quiet"] == "true"
 
-	// 计算总大小
-	var totalSize int64
-	for _, fi := range fileList {
-		size, _ := strconv.ParseInt(fi.Size, 10, 64)
-		totalSize += size
+	// 关闭预建 Session 释放 SSH channel（H3C Comware 等限制 MaxSessions=1）
+	if hs.Session != nil {
+		hs.Session.Close()
 	}
 
-	multiProgress := NewMultiFileProgress(totalSize)
-	quiet := flags.Parameter["quiet"] == "true"
-	showProgress := !quiet && totalSize >= progressThreshold
-	dryRun := config.GlobalFlags.DryRun
+	type fileTarget struct {
+		fi         fileInfo
+		targetPath string
+		targetDir  string
+	}
+	var targets []fileTarget
+	for _, fi := range fileList {
+		var targetPath string
+		if len(fileList) == 1 {
+			dest := flags.Parameter["dest"]
+			if strings.HasSuffix(dest, "/") {
+				targetPath = strings.TrimRight(dest, "/") + "/" + fi.FileName
+			} else {
+				targetPath = dest
+			}
+		} else {
+			targetPath = destRoot + "/" + fi.RelativePath
+		}
+		targets = append(targets, fileTarget{
+			fi:         fi,
+			targetPath: targetPath,
+			targetDir:  filepath.Dir(targetPath),
+		})
+	}
 
-	successCount := 0
+	// 单文件模式：SSH 检测 dest 是否为已存在的目录（末尾无 / 的情况）
+	if len(fileList) == 1 {
+		dest := flags.Parameter["dest"]
+		if !strings.HasSuffix(dest, "/") {
+			checkSession, err := hs.Client.NewSession()
+			if err == nil {
+				var out bytes.Buffer
+				checkSession.Stdout = &out
+				if err := checkSession.Run(fmt.Sprintf(`test -d %q && echo IS_DIR || echo NOT_DIR`, dest)); err == nil {
+					if strings.TrimSpace(out.String()) == "IS_DIR" {
+						fi := fileList[0]
+						targets[0].targetPath = dest + "/" + fi.FileName
+						targets[0].targetDir = filepath.Dir(targets[0].targetPath)
+					}
+				}
+				checkSession.Close()
+			}
+		}
+	}
+
+	// Phase 1: MD5 校验（使用 SSH Session，每次创建后立即关闭）
+	type md5Result struct {
+		ft          fileTarget
+		needCopy    bool
+		skipReason  string
+	}
+	var md5Results []md5Result
 	skipCount := 0
 	failCount := 0
 	var failMsgs []string
 	var dryRunMsgs []string
 
-	// 创建 SFTP 客户端
+	for _, ft := range targets {
+		checkCmd := fmt.Sprintf(`read destMd5 _ <<< "$(md5sum %q 2>/dev/null)" && echo "$destMd5" || echo "NOT_FOUND"`, ft.targetPath)
+
+		var checkOut, checkErr bytes.Buffer
+		checkSession, err := hs.Client.NewSession()
+		if err != nil {
+			Debugf("copy模块 | %s: 创建检查会话失败 %v", ft.fi.FileName, err)
+			failCount++
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建检查会话失败 %v", ft.fi.FileName, err))
+			continue
+		}
+		checkSession.Stdout = &checkOut
+		checkSession.Stderr = &checkErr
+		if err := checkSession.Run(checkCmd); err != nil {
+			Debugf("copy模块 | %s: MD5 检查失败 %v", ft.fi.FileName, err)
+			failCount++
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: MD5 检查失败 %v", ft.fi.FileName, err))
+			checkSession.Close()
+			continue
+		}
+		checkSession.Close()
+
+		remoteMd5 := strings.TrimSpace(checkOut.String())
+		if remoteMd5 == ft.fi.Md5 {
+			skipCount++
+			md5Results = append(md5Results, md5Result{ft: ft, needCopy: false})
+			dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（内容一致，将跳过）", ft.fi.AbsPath, ft.targetPath))
+		} else {
+			md5Results = append(md5Results, md5Result{ft: ft, needCopy: true})
+			dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（将复制）", ft.fi.AbsPath, ft.targetPath))
+		}
+	}
+
+	if dryRun {
+		return Result{
+			Success: true,
+			Output:  strings.Join(dryRunMsgs, "\n"),
+			Change:  false,
+		}
+	}
+
+	// Phase 2: SFTP 传输（创建 SFTP 客户端，此时无 SSH Session 占用 channel）
+	var totalSize int64
+	for _, r := range md5Results {
+		if r.needCopy {
+			size, _ := strconv.ParseInt(r.ft.fi.Size, 10, 64)
+			totalSize += size
+		}
+	}
+
+	multiProgress := NewMultiFileProgress(totalSize)
+	showProgress := !quiet && totalSize >= progressThreshold
+
 	sftpClient, err := sftp.NewClient(hs.Client)
 	if err != nil {
 		return Result{Success: false, Error: "创建 SFTP 客户端失败: " + err.Error(), Change: false}
 	}
 	defer sftpClient.Close()
 
-	// 单文件时预计算目标路径（避免循环内重复判断）
-	var singleFileTarget string
-	if len(fileList) == 1 {
-		dest := flags.Parameter["dest"]
-		fi := fileList[0]
-		if strings.HasSuffix(dest, "/") {
-			singleFileTarget = strings.TrimRight(dest, "/") + "/" + fi.FileName
-		} else if remoteInfo, err := sftpClient.Stat(dest); err == nil && remoteInfo.IsDir() {
-			singleFileTarget = dest + "/" + fi.FileName
-		} else {
-			singleFileTarget = dest
-		}
-	}
-
-	for idx, fi := range fileList {
-		// 构造目标路径
-		var targetPath string
-		if len(fileList) == 1 {
-			targetPath = singleFileTarget
-		} else {
-			targetPath = destRoot + "/" + fi.RelativePath
-		}
-		targetDir := filepath.Dir(targetPath)
-
-		// MD5 检查
-		checkCmd := fmt.Sprintf(`read destMd5 _ <<< "$(md5sum %q 2>/dev/null)" && echo "$destMd5" || echo "NOT_FOUND"`, targetPath)
-
-		var checkOut, checkErr bytes.Buffer
-
-		if idx == 0 {
-			hs.Session.Stdout = &checkOut
-			hs.Session.Stderr = &checkErr
-			if err := hs.Session.Run(checkCmd); err != nil {
-				Debugf("copy模块 | %s: MD5 检查失败 %v", fi.FileName, err)
-				failCount++
-				continue
-			}
-		} else {
-			checkSession, err := hs.Client.NewSession()
-			if err != nil {
-				Debugf("copy模块 | %s: 创建检查会话失败 %v", fi.FileName, err)
-				failCount++
-				continue
-			}
-			checkSession.Stdout = &checkOut
-			checkSession.Stderr = &checkErr
-			if err := checkSession.Run(checkCmd); err != nil {
-				Debugf("copy模块 | %s: MD5 检查失败 %v", fi.FileName, err)
-				failCount++
-				checkSession.Close()
-				continue
-			}
-			checkSession.Close()
-		}
-
-		remoteMd5 := strings.TrimSpace(checkOut.String())
-		if remoteMd5 == fi.Md5 {
-			skipCount++
-			if dryRun {
-				dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（内容一致，将跳过）", fi.AbsPath, targetPath))
-			}
+	successCount := 0
+	for _, r := range md5Results {
+		if !r.needCopy {
 			continue
 		}
+		ft := r.ft
 
-		// dry-run 模式：只输出预览，不实际复制
-		if dryRun {
-			dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（将复制）", fi.AbsPath, targetPath))
-			successCount++
-			continue
-		}
-
-		// 需要复制 - 使用 SFTP
-		if err := sftpClient.MkdirAll(targetDir); err != nil {
-			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建目录失败 %v", fi.FileName, err))
+		if err := sftpClient.MkdirAll(ft.targetDir); err != nil {
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建目录失败 %v", ft.fi.FileName, err))
 			failCount++
 			continue
 		}
 
-		Debugf("copy模块 | %s: 开始传输到 %s", fi.FileName, targetPath)
-		srcFile, err := os.Open(fi.AbsPath)
+		Debugf("copy模块 | %s: 开始传输到 %s", ft.fi.FileName, ft.targetPath)
+		srcFile, err := os.Open(ft.fi.AbsPath)
 		if err != nil {
-			failMsgs = append(failMsgs, fmt.Sprintf("%s: 打开源文件失败 %v", fi.FileName, err))
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 打开源文件失败 %v", ft.fi.FileName, err))
 			failCount++
 			continue
 		}
 
-		dstFile, err := sftpClient.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+		dstFile, err := sftpClient.OpenFile(ft.targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 		if err != nil {
-			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建远程文件失败 %v", fi.FileName, err))
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建远程文件失败 %v", ft.fi.FileName, err))
 			srcFile.Close()
 			failCount++
 			continue
 		}
 
-		fileSize, _ := strconv.ParseInt(fi.Size, 10, 64)
-
+		fileSize, _ := strconv.ParseInt(ft.fi.Size, 10, 64)
 		var reader io.Reader = srcFile
 		if showProgress {
 			reader = &progressTrackerReader{
@@ -249,38 +281,28 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		dstFile.Close()
 
 		if err != nil {
-			failMsgs = append(failMsgs, fmt.Sprintf("%s: 传输失败 %v", fi.FileName, err))
+			failMsgs = append(failMsgs, fmt.Sprintf("%s: 传输失败 %v", ft.fi.FileName, err))
 			failCount++
 			continue
 		}
 
-		// 设置权限
-		mode, _ := strconv.ParseUint(fi.Mode, 8, 32)
-		if err := sftpClient.Chmod(targetPath, os.FileMode(mode)); err != nil {
-			Debugf("copy模块 | %s: 设置权限失败 %v", fi.FileName, err)
+		mode, _ := strconv.ParseUint(ft.fi.Mode, 8, 32)
+		if err := sftpClient.Chmod(ft.targetPath, os.FileMode(mode)); err != nil {
+			Debugf("copy模块 | %s: 设置权限失败 %v", ft.fi.FileName, err)
 		}
 
 		successCount++
 	}
 
-	// dry-run 模式：返回预览信息
-	if dryRun {
-		return Result{
-			Success: true,
-			Output:  strings.Join(dryRunMsgs, "\n"),
-			Change:  false,
-		}
-	}
-
 	// 单文件时保持原有输出格式
 	if len(fileList) == 1 {
 		fi := fileList[0]
+		targetPath := md5Results[0].ft.targetPath
 		if successCount == 1 {
-			return Result{Success: true, Output: fmt.Sprintf("已成功复制 %s 到 %s（内容有更新）", fi.AbsPath, singleFileTarget), Change: true}
+			return Result{Success: true, Output: fmt.Sprintf("已成功复制 %s 到 %s（内容有更新）", fi.AbsPath, targetPath), Change: true}
 		} else if skipCount == 1 {
-			return Result{Success: true, Output: fmt.Sprintf("文件 %s 与远程 %s 内容一致，无需复制", fi.AbsPath, singleFileTarget), Change: false}
+			return Result{Success: true, Output: fmt.Sprintf("文件 %s 与远程 %s 内容一致，无需复制", fi.AbsPath, targetPath), Change: false}
 		}
-		// 失败时返回具体错误
 		if len(failMsgs) > 0 {
 			return Result{Success: false, Output: "", Error: failMsgs[0], Change: false}
 		}

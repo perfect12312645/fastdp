@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,6 +14,9 @@ import (
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/pkg/sftp"
 )
+
+// 进度条显示阈值：单文件 < 1MB 不显示进度条
+const fetchProgressThreshold = 1 * 1024 * 1024 // 1MB
 
 // ===================== 全局进度条（单例，所有主机共享）=====================
 var (
@@ -29,7 +33,6 @@ func getFetchProgressWriter() progress.Writer {
 		fetchProgressWriter.Style().Visibility.ETA = true
 		fetchProgressWriter.Style().Visibility.Speed = true
 		fetchProgressWriter.Style().Visibility.Percentage = true
-		// ✅ 限制消息部分最大宽度（字符数），避免超长导致换行
 		fetchProgressWriter.SetMessageWidth(45)
 		fetchProgressWriter.SetAutoStop(true)
 
@@ -49,10 +52,10 @@ func NewFetchModule() Module {
 }
 
 func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
-	// 1. 获取参数
-	remotePath := flags.Parameter["remote"] // 远程文件（支持通配符 /tmp/sec*）
-	localDest := flags.Parameter["dest"]    // 本地保存目录
-	noIpDir := flags.Parameter["no_ip_dir"] // 是否去掉IP目录
+	remotePath := flags.Parameter["remote"]
+	localDest := flags.Parameter["dest"]
+	noIpDir := flags.Parameter["no_ip_dir"]
+	recursive := flags.Parameter["recursive"] == "true"
 
 	if localDest == "" {
 		localDest = config.GlobalConfig.DefaultFetchPath
@@ -62,8 +65,7 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 	}
 	dryRun := config.GlobalFlags.DryRun
 
-	// 关闭预建 Session 释放 SSH channel：H3C Comware 等设备限制 MaxSessions=1，
-	// 不关闭则 SFTP 通道打开失败（administratively prohibited）
+	// 关闭预建 Session 释放 SSH channel（H3C Comware 等限制 MaxSessions=1）
 	if hs.Session != nil {
 		hs.Session.Close()
 	}
@@ -79,15 +81,48 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 	}
 	defer sftpClient.Close()
 
-	// 3. 匹配远程文件（支持 * ?）
-	files, err := sftpClient.Glob(remotePath)
-	if err != nil {
-		return Result{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Sprintf("匹配文件失败: %v", err),
-			Change:  false,
+	isRecursive := recursive || strings.HasSuffix(remotePath, "/")
+
+	var files []string
+	if isRecursive {
+		files, err = walkSFTPDir(sftpClient, remotePath)
+		if err != nil {
+			return Result{
+				Success: false,
+				Output:  "",
+				Error:   fmt.Sprintf("遍历远程目录失败: %v", err),
+				Change:  false,
+			}
 		}
+	} else {
+		files, err = sftpClient.Glob(remotePath)
+		if err != nil {
+			return Result{
+				Success: false,
+				Output:  "",
+				Error:   fmt.Sprintf("匹配文件失败: %v", err),
+				Change:  false,
+			}
+		}
+	}
+
+	if !isRecursive {
+		var filtered []string
+		for _, f := range files {
+			if stat, statErr := sftpClient.Stat(f); statErr == nil && stat.IsDir() {
+				continue
+			}
+			filtered = append(filtered, f)
+		}
+		if len(filtered) == 0 && len(files) > 0 {
+			return Result{
+				Success: false,
+				Output:  "",
+				Error:   fmt.Sprintf("路径 %q 是一个目录，请使用递归模式拉取：路径末尾加 / 或 --recursive", remotePath),
+				Change:  false,
+			}
+		}
+		files = filtered
 	}
 
 	if len(files) == 0 {
@@ -99,17 +134,10 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 		}
 	}
 
-	// dry-run 模式：只显示会下载的文件，不实际下载
 	if dryRun {
 		var preview []string
 		for _, f := range files {
-			filename := filepath.Base(f)
-			var localFile string
-			if noIpDir == "true" {
-				localFile = filepath.Join(localDest, fmt.Sprintf("%s_%s", hs.Addr, filename))
-			} else {
-				localFile = filepath.Join(localDest, hs.Addr, filename)
-			}
+			localFile := m.buildLocalPath(f, remotePath, localDest, hs.Addr, isRecursive, noIpDir)
 			preview = append(preview, fmt.Sprintf("%s → %s", f, localFile))
 		}
 		return Result{
@@ -120,23 +148,11 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 		}
 	}
 
-	// 4. 逐个下载文件
 	var downloadedFiles []string
 	for _, f := range files {
-		var localFile string
-		filename := filepath.Base(f)
-
-		if noIpDir == "true" {
-			// ✅ 启用：不创建IP目录 → 文件名 = IP_原文件名
-			localFile = filepath.Join(localDest, fmt.Sprintf("%s_%s", hs.Addr, filename))
-		} else {
-			// ✅ 默认：创建IP目录
-			localFile = filepath.Join(localDest, hs.Addr, filename)
-		}
+		localFile := m.buildLocalPath(f, remotePath, localDest, hs.Addr, isRecursive, noIpDir)
 		localDir := filepath.Dir(localFile)
-		// 2. 获取进度条总管
-		pw := getFetchProgressWriter()
-		// 创建本地目录
+
 		if err := os.MkdirAll(localDir, 0755); err != nil {
 			return Result{
 				Success: false,
@@ -146,7 +162,6 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 			}
 		}
 
-		// 打开远程文件
 		srcFile, err := sftpClient.Open(f)
 		if err != nil {
 			return Result{
@@ -157,17 +172,17 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 			}
 		}
 
-		// 获取文件大小
 		stat, err := srcFile.Stat()
 		if err != nil {
 			srcFile.Close()
 			return Result{
 				Success: false,
+				Output:  "",
 				Error:   fmt.Sprintf("获取文件信息失败 %s: %v", f, err),
+				Change:  false,
 			}
 		}
 
-		// 创建本地文件
 		dstFile, err := os.Create(localFile)
 		if err != nil {
 			srcFile.Close()
@@ -178,40 +193,34 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 				Change:  false,
 			}
 		}
-		// ===================== 进度条 =====================
-		tracker := &progress.Tracker{
-			Message: fmt.Sprintf("%s %s", hs.Addr, f),
-			Total:   stat.Size(),
-			Units:   progress.UnitsBytes,
-		}
-		pw.AppendTracker(tracker)
 
-		// 带进度拷贝
-		buf := make([]byte, 32<<10) // 32KB 缓冲
-		for {
-			n, err := srcFile.Read(buf)
-			if n > 0 {
-				_, _ = dstFile.Write(buf[:n])
-				tracker.Increment(int64(n))
+		if stat.Size() >= fetchProgressThreshold {
+			pw := getFetchProgressWriter()
+			tracker := &progress.Tracker{
+				Message: fmt.Sprintf("%s %s", hs.Addr, f),
+				Total:   stat.Size(),
+				Units:   progress.UnitsBytes,
 			}
-			if err == io.EOF {
-				break
-			}
+			pw.AppendTracker(tracker)
+			err = copyWithProgress(srcFile, dstFile, tracker)
 			if err != nil {
 				tracker.MarkAsErrored()
 				srcFile.Close()
 				dstFile.Close()
-				return Result{
-					Success: false,
-					Error:   fmt.Sprintf("下载失败 %s: %v", f, err),
-				}
+				return Result{Success: false, Output: "", Error: fmt.Sprintf("下载失败 %s: %v", f, err), Change: false}
+			}
+			tracker.MarkAsDone()
+		} else {
+			err = copySimple(srcFile, dstFile)
+			if err != nil {
+				srcFile.Close()
+				dstFile.Close()
+				return Result{Success: false, Output: "", Error: fmt.Sprintf("下载失败 %s: %v", f, err), Change: false}
 			}
 		}
 
 		srcFile.Close()
 		dstFile.Close()
-		tracker.MarkAsDone()
-
 		downloadedFiles = append(downloadedFiles, localFile)
 	}
 
@@ -221,6 +230,69 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 		Error:   "",
 		Change:  true,
 	}
+}
+
+func (m *FetchModule) buildLocalPath(remoteFile, remoteRoot, localDest, addr string, recursive bool, noIpDir string) string {
+	if recursive {
+		// 递归模式：保留从 / 开始的完整路径
+		// remoteRoot = "/var/log/app/", remoteFile = "/var/log/app/sub/b.log"
+		// → localDest/addr/var/log/app/sub/b.log
+		rel := strings.TrimPrefix(remoteFile, "/")
+		return filepath.Join(localDest, addr, rel)
+	}
+
+	filename := filepath.Base(remoteFile)
+	if noIpDir == "true" {
+		return filepath.Join(localDest, fmt.Sprintf("%s_%s", addr, filename))
+	}
+	return filepath.Join(localDest, addr, filename)
+}
+
+func walkSFTPDir(client *sftp.Client, root string) ([]string, error) {
+	var files []string
+	var walk func(dir string) error
+	walk = func(dir string) error {
+		entries, err := client.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			fullPath := path.Join(dir, entry.Name())
+			if entry.IsDir() {
+				if err := walk(fullPath); err != nil {
+					return err
+				}
+			} else {
+				files = append(files, fullPath)
+			}
+		}
+		return nil
+	}
+	err := walk(root)
+	return files, err
+}
+
+func copyWithProgress(src io.Reader, dst io.Writer, tracker *progress.Tracker) error {
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			dst.Write(buf[:n])
+			tracker.Increment(int64(n))
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copySimple(src io.Reader, dst io.Writer) error {
+	_, err := io.Copy(dst, src)
+	return err
 }
 
 // 注册模块

@@ -30,14 +30,15 @@ var fetchCmd = &cobra.Command{
 		// 处理主机组参数（如 web/all）
 		config.GlobalFlags.HostInventory = args
 
-		// 获取远程文件 & 本地保存目录
 		remoteFile, _ := cmd.Flags().GetString("remote")
 		localDir, _ := cmd.Flags().GetString("dest")
 		noIpDir, _ := cmd.Flags().GetBool("no-ip-dir")
+		recursive, _ := cmd.Flags().GetBool("recursive")
 
 		config.GlobalFlags.Parameter["remote"] = remoteFile
 		config.GlobalFlags.Parameter["dest"] = localDir
 		config.GlobalFlags.Parameter["no_ip_dir"] = fmt.Sprintf("%v", noIpDir)
+		config.GlobalFlags.Parameter["recursive"] = fmt.Sprintf("%v", recursive)
 
 		execHosts, err := GetInfo()
 		if err != nil {
@@ -71,6 +72,11 @@ var fetchCmd = &cobra.Command{
 
   # 支持通配符 * ?
   fastdp fetch -r "/tmp/sec-*.log" all
+
+  # 递归拉取整个目录（保留相对路径结构）
+  fastdp fetch -r "/var/log/app/" all
+  # 或使用 --recursive 标志
+  fastdp fetch -r "/var/log/app" --recursive all
 `,
 
 }
@@ -85,4 +91,6 @@ func init() {
 	fetchCmd.Flags().StringP("dest", "d", "", "本地保存目录,默认./fastdp-fetch")
 
 	fetchCmd.Flags().BoolP("no-ip-dir", "", false, "拉取文件时不创建IP目录，文件名为 主机IP_文件名")
+
+	fetchCmd.Flags().BoolP("recursive", "", false, "递归拉取目录（路径以 / 结尾时自动启用）")
 }

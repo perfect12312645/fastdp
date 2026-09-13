@@ -53,24 +53,24 @@
 
 | 平台 | 架构 | 下载地址 |
 |------|------|---------|
-| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.tar.gz) |
-| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-arm64.tar.gz) |
-| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-amd64.tar.gz) |
-| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-darwin-arm64.tar.gz) |
+| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.tar.gz) |
+| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-arm64.tar.gz) |
+| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-amd64.tar.gz) |
+| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-arm64.tar.gz) |
 
 #### RPM / DEB 包
 
 | 平台 | 架构 | 包类型 | 下载地址 |
 |------|------|--------|---------|
-| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6/fastdp-6-1.ky10.x86_64.rpm) |
-| Linux | x86_64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/fastdp-v6.1.0-linux-amd64.deb) |
+| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-1.ky10.x86_64.rpm) |
+| Linux | x86_64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.deb) |
 
-> **注意：** RPM 包暂为 v6 旧版本，v6.1.0 RPM 包后续提供。DEB 包已更新到 v6.1.0。
+> **注意：** 包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
 
 tar.gz 包内容：
 
 ```
-fastdp-v6.1.0-linux-amd64/
+fastdp-v6.2.0-linux-amd64/
 ├── fastdp              # 主程序（可执行）
 ├── config.toml         # 配置文件模板
 ├── host                # 主机组配置模板
@@ -82,11 +82,9 @@ fastdp-v6.1.0-linux-amd64/
 
 #### RPM 包（CentOS / Rocky / openEuler 等）
 
-> **注意**：包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
-
 ```bash
 # 安装（需要 root 权限）
-sudo rpm -ivh fastdp-6-1.ky10.x86_64.rpm
+sudo rpm -ivh fastdp-v6.2.0-1.ky10.x86_64.rpm
 
 # 安装完成后即可使用
 fastdp --help
@@ -96,7 +94,7 @@ fastdp --help
 
 ```bash
 # 安装（需要 root 权限）
-sudo dpkg -i fastdp-v6.1.0-linux-amd64.deb
+sudo dpkg -i fastdp-v6.2.0-linux-amd64.deb
 
 # 安装完成后即可使用
 fastdp --help
@@ -121,10 +119,10 @@ vim ~/.fastdp/config.toml
 
 ```bash
 # 解压
-tar -zxvf fastdp-v6.1.0-linux-amd64.tar.gz
+tar -zxvf fastdp-v6.2.0-linux-amd64.tar.gz
 
 # 进入目录
-cd fastdp-v6.1.0-linux-amd64
+cd fastdp-v6.2.0-linux-amd64
 
 # 安装到系统路径（需要 sudo）
 sudo mv fastdp /usr/local/bin/
@@ -142,10 +140,10 @@ sudo fastdp --help
 
 ```bash
 # 解压
-tar -zxvf fastdp-v6.1.0-linux-amd64.tar.gz
+tar -zxvf fastdp-v6.2.0-linux-amd64.tar.gz
 
 # 进入目录
-cd fastdp-v6.1.0-linux-amd64
+cd fastdp-v6.2.0-linux-amd64
 
 # 复制到家目录
 mkdir -p ~/.fastdp/bin
@@ -182,9 +180,9 @@ sudo cp fastdp /usr/local/bin/
 
 # 或使用构建脚本打发布包（自动下载源码并构建 tar.gz / rpm / deb）
 # Gitee
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.1.0/build.sh
+wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/build.sh
 # 或 GitHub
-wget https://github.com/perfect12312645/fastdp/releases/download/v6.1.0/build.sh
+wget https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/build.sh
 chmod +x build.sh
 ./build.sh
 ```
@@ -332,18 +330,19 @@ fastdp copy -s app.conf -r ./scripts/ -d /opt/ all
 
 ### 3. fetch 模块
 
-批量从远程主机拉取文件（基于 SFTP），支持通配符匹配。
+批量从远程主机拉取文件（基于 SFTP），支持通配符匹配和目录递归。
 
 参数：
-- `-r` / `--remote`：远程文件路径，支持 `*` `?` `[]` 通配符（必需）
+- `-r` / `--remote`：远程文件路径（必需），支持 `*` `?` `[]` 通配符，以 `/` 结尾自动递归
 - `-d` / `--dest`：本地保存目录（优先使用命令行参数，其次配置文件 `default_fetch_path`，兜底 `./fastdp-fetch`）
-- `--no-ip-dir`：不创建 IP 目录，文件名改为 `IP_原文件名`
+- `--no-ip-dir`：不创建 IP 目录，文件名改为 `IP_原文件名`（仅通配符模式）
+- `--recursive`：递归拉取目录（保留完整路径结构，路径以 `/` 结尾时自动启用）
 
 > 使用通配符时必须加引号
 
 ```bash
 # 批量拉取所有主机 /tmp/sec* 文件
-# 重要：远程路径含通配符时，必须用引号包裹
+# 【重要】远程路径含 * ? 等通配符时，必须用 " 或 ' 包裹，避免本地shell提前解析
 fastdp fetch --remote "/tmp/sec*" all
 
 # 拉取指定组/IP 的日志文件
@@ -355,9 +354,17 @@ fastdp fetch -r "/tmp/sec?" --dest ./my-download all
 
 # 不创建 IP 目录，文件名为 IP_文件名
 fastdp fetch -r "/tmp/*.log" --no-ip-dir all
+
+# 递归拉取整个目录（保留完整路径结构）
+fastdp fetch -r "/var/log/app/" all
+# 或使用 --recursive 标志
+fastdp fetch -r "/var/log/app" --recursive all
 ```
 
-> **后续优化：** 计划支持目录递归拉取和 MD5 幂等性检查（已下载且内容一致的文件自动跳过），适合定时任务场景。大量文件传输推荐使用 rsync。
+> **使用建议：**
+> - 单文件 < 1MB 不显示进度条（传输时间过短，无显示必要）
+> - 大量文件传输（单台 > 1000 文件或 > 500MB）建议使用 rsync
+> - 递归模式下本地路径为 `localDest/addr/完整远程路径`，如 `fastdp-fetch/192.168.1.100/var/log/app/xxx.log`
 
 ![image-20260529175910671](./assets/fetch.png)
 
@@ -676,7 +683,10 @@ fastdp [tab][tab]
    - 自动 MD5 校验，文件相同则跳过传输
 3. **文件拉取**：
    - 远程路径含 `*` `?` 等通配符时，必须用引号包裹
-   - 默认按 IP 创建子目录，`--no-ip-dir` 可改为 IP_文件名 模式
+   - 默认按 IP 创建子目录，`--no-ip-dir` 可改为 IP_文件名 模式（仅通配符模式）
+   - 路径以 `/` 结尾或 `--recursive` 标志时递归拉取目录
+   - 单文件 < 1MB 不显示进度条
+   - 大量文件传输（单台 > 1000 文件或 > 500MB）建议使用 rsync
 4. **远程脚本**：
    - 仅支持纯文本脚本（最大 512KB），禁止上传二进制文件
    - 非 .sh 后缀的文件会发出警告但不阻止执行

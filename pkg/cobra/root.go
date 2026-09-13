@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	Version = "v6.1.0"
+	Version = "v6.2.0"
 )
 var rootCmd = &cobra.Command{
 	Use:   "fastdp",
