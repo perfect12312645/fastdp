@@ -62,7 +62,7 @@
 
 | 平台 | 架构 | 包类型 | 下载地址 |
 |------|------|--------|---------|
-| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-1.ky10.x86_64.rpm) |
+| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-6.2.0-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-6.2.0-1.ky10.x86_64.rpm) |
 | Linux | x86_64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.deb) |
 
 > **注意：** 包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
@@ -84,7 +84,7 @@ fastdp-v6.2.0-linux-amd64/
 
 ```bash
 # 安装（需要 root 权限）
-sudo rpm -ivh fastdp-v6.2.0-1.ky10.x86_64.rpm
+sudo rpm -ivh fastdp-6.2.0-1.ky10.x86_64.rpm
 
 # 安装完成后即可使用
 fastdp --help
