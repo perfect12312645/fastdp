@@ -713,8 +713,11 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 	}
 	switch outputFormat {
 	case "csv":
+		// 写入 UTF-8 BOM，解决 Windows Excel 打开 CSV 中文乱码问题
+		os.Stdout.Write([]byte{0xEF, 0xBB, 0xBF})
 		fmt.Println(t.RenderCSV())
 	case "md":
+		os.Stdout.Write([]byte{0xEF, 0xBB, 0xBF})
 		fmt.Println(t.RenderMarkdown())
 	case "html":
 		htmlContent := renderHTML(t)
