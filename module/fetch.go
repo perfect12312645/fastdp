@@ -65,11 +65,7 @@ func (m *FetchModule) Run(hs HostSession, flags *config.Flags) Result {
 	}
 	dryRun := config.GlobalFlags.DryRun
 
-	// 关闭预建 Session 释放 SSH channel（H3C Comware 等限制 MaxSessions=1）
-	if hs.Session != nil {
-		hs.Session.Close()
-	}
-
+	// fetch 模块不创建预建 Session（SshConnect 中已跳过），直接用 Client 创建 SFTP
 	sftpClient, err := sftp.NewClient(hs.Client)
 	if err != nil {
 		return Result{

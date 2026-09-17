@@ -23,7 +23,7 @@ type ConnError struct {
 	Msg  string
 }
 
-func SshConnect(allHosts []*Host) ([]HostSession, map[string]ConnError) {
+func SshConnect(allHosts []*Host, moduleName string) ([]HostSession, map[string]ConnError) {
 	var (
 		wg           sync.WaitGroup
 		mu           sync.Mutex
@@ -92,13 +92,17 @@ func SshConnect(allHosts []*Host) ([]HostSession, map[string]ConnError) {
 				return
 			}
 
-			session, err := client.NewSession()
-			if err != nil {
-				mu.Lock()
-				failedHosts[h.Address] = ConnError{Kind: "session", Msg: err.Error()}
-				mu.Unlock()
-				client.Close()
-				return
+			// fetch/copy 模块不需要预建 Session（避免 H3C MaxSessions=1 冲突）
+			var session *ssh.Session
+			if moduleName != "fetch" && moduleName != "copy" {
+				session, err = client.NewSession()
+				if err != nil {
+					mu.Lock()
+					failedHosts[h.Address] = ConnError{Kind: "session", Msg: err.Error()}
+					mu.Unlock()
+					client.Close()
+					return
+				}
 			}
 
 			// 将结果添加到切片（需要加锁）

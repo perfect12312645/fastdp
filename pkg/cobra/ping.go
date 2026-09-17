@@ -29,7 +29,7 @@ var pingCmd = &cobra.Command{
 			Errorf("获取配置信息失败: %v", err)
 			os.Exit(exitcode.ParamError)
 		}
-		hostSessions, failedHosts := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts, "ping")
 		mod, err := module.GetModule("ping")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)

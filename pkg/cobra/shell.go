@@ -64,7 +64,7 @@ var shellCmd = &cobra.Command{
 			os.Exit(exitcode.ParamError)
 		}
 
-		hostSessions, failedHosts := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts, "shell")
 		mod, err := module.GetModule("shell")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)

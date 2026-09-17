@@ -120,7 +120,7 @@ var scriptCmd = &cobra.Command{
 			os.Exit(exitcode.ParamError)
 		}
 
-		hostSessions, failedHosts := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts, "script")
 		mod, err := module.GetModule("script")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)

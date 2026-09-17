@@ -227,8 +227,10 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 		go func(hs HostSession) {
 			defer wg.Done() // goroutine结束时，WaitGroup计数器-1（等价于wg.Add(-1)）
 			// 确保会话资源释放
-			defer hs.Client.Close()  // 关闭SSH客户端
-			defer hs.Session.Close() // 关闭SSH会话
+			defer hs.Client.Close() // 关闭SSH客户端
+			if hs.Session != nil {
+				defer hs.Session.Close() // 关闭SSH会话（fetch/copy 模块无 Session）
+			}
 			// 控制并发数量
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()

@@ -57,6 +57,7 @@ var copyCmd = &cobra.Command{
 
 		noKeepDir, _ := cmd.Flags().GetBool("no-keep-dir")
 		quiet, _ := cmd.Flags().GetBool("quiet")
+		skipMd5, _ := cmd.Flags().GetBool("skip-md5")
 
 		// 收集所有源文件
 		fileList, err := collectSourceFiles(sValues, rValues, noKeepDir)
@@ -72,13 +73,14 @@ var copyCmd = &cobra.Command{
 		// 将文件列表 JSON 编码后传入
 		jsonData, _ := json.Marshal(fileList)
 		config.GlobalFlags.Parameter["file_list"] = string(jsonData)
+		config.GlobalFlags.Parameter["skip_md5"] = strconv.FormatBool(skipMd5)
 
 		execHosts, err := GetInfo()
 		if err != nil {
 			Errorf("获取配置信息失败: %v", err)
 			os.Exit(exitcode.ParamError)
 		}
-		hostSessions, failedHosts := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts, "copy")
 		mod, err := module.GetModule("copy")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
@@ -103,7 +105,10 @@ var copyCmd = &cobra.Command{
   # 结果：/etc/app/xxx.yml
 
   # 混合使用
-  fastdp copy -s app.conf -r ./scripts/ -d /opt/ all`,
+  fastdp copy -s app.conf -r ./scripts/ -d /opt/ all
+
+  # 跳过 MD5 校验，直接传输（适用于交换机等不支持 md5sum 的设备）
+  fastdp copy -s app.conf -d /etc/ web --skip-md5`,
 }
 
 func init() {
@@ -112,6 +117,7 @@ func init() {
 	copyCmd.Flags().StringP("dest", "d", "", "目标路径 (必需)")
 	copyCmd.Flags().Bool("no-keep-dir", false, "不保留源顶层目录，平铺复制目录内容到目标（默认保留目录结构）")
 	copyCmd.Flags().BoolP("quiet", "q", false, "静默模式：不显示进度信息")
+	copyCmd.Flags().Bool("skip-md5", false, "跳过 MD5 校验，直接传输所有文件（适用于交换机等不支持 md5sum 的设备）")
 	_ = copyCmd.MarkFlagRequired("dest")
 }
 

@@ -114,11 +114,7 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 	destRoot := strings.TrimRight(flags.Parameter["dest"], "/")
 	dryRun := config.GlobalFlags.DryRun
 	quiet := flags.Parameter["quiet"] == "true"
-
-	// 关闭预建 Session 释放 SSH channel（H3C Comware 等限制 MaxSessions=1）
-	if hs.Session != nil {
-		hs.Session.Close()
-	}
+	skipMd5 := flags.Parameter["skip_md5"] == "true"
 
 	type fileTarget struct {
 		fi         fileInfo
@@ -145,31 +141,11 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		})
 	}
 
-	// 单文件模式：SSH 检测 dest 是否为已存在的目录（末尾无 / 的情况）
-	if len(fileList) == 1 {
-		dest := flags.Parameter["dest"]
-		if !strings.HasSuffix(dest, "/") {
-			checkSession, err := hs.Client.NewSession()
-			if err == nil {
-				var out bytes.Buffer
-				checkSession.Stdout = &out
-				if err := checkSession.Run(fmt.Sprintf(`test -d %q && echo IS_DIR || echo NOT_DIR`, dest)); err == nil {
-					if strings.TrimSpace(out.String()) == "IS_DIR" {
-						fi := fileList[0]
-						targets[0].targetPath = dest + "/" + fi.FileName
-						targets[0].targetDir = filepath.Dir(targets[0].targetPath)
-					}
-				}
-				checkSession.Close()
-			}
-		}
-	}
-
 	// Phase 1: MD5 校验（使用 SSH Session，每次创建后立即关闭）
+	// skip-md5 模式下跳过此阶段，所有文件直接标记为 needCopy
 	type md5Result struct {
-		ft          fileTarget
-		needCopy    bool
-		skipReason  string
+		ft       fileTarget
+		needCopy bool
 	}
 	var md5Results []md5Result
 	skipCount := 0
@@ -177,36 +153,65 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 	var failMsgs []string
 	var dryRunMsgs []string
 
-	for _, ft := range targets {
-		checkCmd := fmt.Sprintf(`read destMd5 _ <<< "$(md5sum %q 2>/dev/null)" && echo "$destMd5" || echo "NOT_FOUND"`, ft.targetPath)
-
-		var checkOut, checkErr bytes.Buffer
-		checkSession, err := hs.Client.NewSession()
-		if err != nil {
-			Debugf("copy模块 | %s: 创建检查会话失败 %v", ft.fi.FileName, err)
-			failCount++
-			failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建检查会话失败 %v", ft.fi.FileName, err))
-			continue
-		}
-		checkSession.Stdout = &checkOut
-		checkSession.Stderr = &checkErr
-		if err := checkSession.Run(checkCmd); err != nil {
-			Debugf("copy模块 | %s: MD5 检查失败 %v", ft.fi.FileName, err)
-			failCount++
-			failMsgs = append(failMsgs, fmt.Sprintf("%s: MD5 检查失败 %v", ft.fi.FileName, err))
-			checkSession.Close()
-			continue
-		}
-		checkSession.Close()
-
-		remoteMd5 := strings.TrimSpace(checkOut.String())
-		if remoteMd5 == ft.fi.Md5 {
-			skipCount++
-			md5Results = append(md5Results, md5Result{ft: ft, needCopy: false})
-			dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（内容一致，将跳过）", ft.fi.AbsPath, ft.targetPath))
-		} else {
+	if skipMd5 {
+		// 跳过 MD5 校验，所有文件直接传输
+		for _, ft := range targets {
 			md5Results = append(md5Results, md5Result{ft: ft, needCopy: true})
 			dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（将复制）", ft.fi.AbsPath, ft.targetPath))
+		}
+	} else {
+		// 单文件模式：SSH 检测 dest 是否为已存在的目录（末尾无 / 的情况）
+		if len(fileList) == 1 {
+			dest := flags.Parameter["dest"]
+			if !strings.HasSuffix(dest, "/") {
+				checkSession, err := hs.Client.NewSession()
+				if err == nil {
+					var out bytes.Buffer
+					checkSession.Stdout = &out
+					if err := checkSession.Run(fmt.Sprintf(`test -d %q && echo IS_DIR || echo NOT_DIR`, dest)); err == nil {
+						if strings.TrimSpace(out.String()) == "IS_DIR" {
+							fi := fileList[0]
+							targets[0].targetPath = dest + "/" + fi.FileName
+							targets[0].targetDir = filepath.Dir(targets[0].targetPath)
+						}
+					}
+					checkSession.Close()
+				}
+			}
+		}
+
+		// MD5 校验（每文件创建独立 Session，SSH 协议不支持 Session 复用）
+		for _, ft := range targets {
+			checkCmd := fmt.Sprintf(`read destMd5 _ <<< "$(md5sum %q 2>/dev/null)" && echo "$destMd5" || echo "NOT_FOUND"`, ft.targetPath)
+
+			var checkOut, checkErr bytes.Buffer
+			checkSession, err := hs.Client.NewSession()
+			if err != nil {
+				Debugf("copy模块 | %s: 创建检查会话失败 %v", ft.fi.FileName, err)
+				failCount++
+				failMsgs = append(failMsgs, fmt.Sprintf("%s: 创建检查会话失败 %v", ft.fi.FileName, err))
+				continue
+			}
+			checkSession.Stdout = &checkOut
+			checkSession.Stderr = &checkErr
+			if err := checkSession.Run(checkCmd); err != nil {
+				Debugf("copy模块 | %s: MD5 检查失败 %v", ft.fi.FileName, err)
+				failCount++
+				failMsgs = append(failMsgs, fmt.Sprintf("%s: MD5 检查失败 %v", ft.fi.FileName, err))
+				checkSession.Close()
+				continue
+			}
+			checkSession.Close()
+
+			remoteMd5 := strings.TrimSpace(checkOut.String())
+			if remoteMd5 == ft.fi.Md5 {
+				skipCount++
+				md5Results = append(md5Results, md5Result{ft: ft, needCopy: false})
+				dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（内容一致，将跳过）", ft.fi.AbsPath, ft.targetPath))
+			} else {
+				md5Results = append(md5Results, md5Result{ft: ft, needCopy: true})
+				dryRunMsgs = append(dryRunMsgs, fmt.Sprintf("%s → %s（将复制）", ft.fi.AbsPath, ft.targetPath))
+			}
 		}
 	}
 
@@ -235,6 +240,20 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		return Result{Success: false, Error: "创建 SFTP 客户端失败: " + err.Error(), Change: false}
 	}
 	defer sftpClient.Close()
+
+	// skip-md5 模式：用 SFTP Stat 检测目录（Phase 1 已跳过）
+	if skipMd5 && len(fileList) == 1 {
+		dest := flags.Parameter["dest"]
+		if !strings.HasSuffix(dest, "/") {
+			if remoteInfo, statErr := sftpClient.Stat(dest); statErr == nil && remoteInfo.IsDir() {
+				fi := fileList[0]
+				for i := range md5Results {
+					md5Results[i].ft.targetPath = dest + "/" + fi.FileName
+					md5Results[i].ft.targetDir = filepath.Dir(md5Results[i].ft.targetPath)
+				}
+			}
+		}
+	}
 
 	successCount := 0
 	for _, r := range md5Results {
@@ -295,7 +314,7 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 	}
 
 	// 单文件时保持原有输出格式
-	if len(fileList) == 1 {
+	if len(fileList) == 1 && len(md5Results) > 0 {
 		fi := fileList[0]
 		targetPath := md5Results[0].ft.targetPath
 		if successCount == 1 {

@@ -89,7 +89,7 @@ var checkCmd = &cobra.Command{
 		}
 		config.GlobalFlags.Parameter["script_content"] = parsedScript
 
-		hostSessions, failedHosts := SshConnect(execHosts)
+		hostSessions, failedHosts := SshConnect(execHosts, "check")
 		mod, err := module.GetModule("script")
 		if err != nil {
 			Errorf("获取模块失败: %v", err)
