@@ -66,6 +66,8 @@ var rootCmd = &cobra.Command{
 		config.GlobalFlags.Limit, _ = cmd.Flags().GetString("limit")
 		config.GlobalFlags.Output, _ = cmd.Flags().GetString("output")
 		config.GlobalFlags.DryRun, _ = cmd.Flags().GetBool("dry-run")
+		config.GlobalFlags.SSHKeyPath, _ = cmd.Flags().GetString("key")
+		config.GlobalFlags.AllKeys, _ = cmd.Flags().GetBool("all-keys")
 		inventoryPath, _ := cmd.Flags().GetString("inventory")
 		if inventoryPath != "" {
 			// 命令行传了，覆盖配置文件
@@ -115,9 +117,11 @@ func init() {
 	rootCmd.PersistentFlags().String("limit", "", "从文件读取目标主机列表（@file，常用于对失败主机重跑）")
 	rootCmd.PersistentFlags().StringP("output", "o", "text", "输出格式：text（人类阅读友好）/ JSON（结构化，适合脚本和 AI Agent）")
 	rootCmd.PersistentFlags().Bool("dry-run", false, "干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览）")
+	rootCmd.PersistentFlags().StringP("key", "k", "", "指定 SSH 私钥路径（默认自动发现 ~/.ssh/ 下的第一个私钥）")
+	rootCmd.PersistentFlags().Bool("all-keys", false, "尝试 ~/.ssh/ 下所有私钥（适用于多机器使用不同私钥的场景，性能会下降）")
 
 	// 添加子命令
-	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd)
+	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd, copyIdCmd)
 
 }
 

@@ -33,6 +33,8 @@ type Flags struct {
 	Output        string // 输出格式: text(默认) / json
 	Quiet         bool   // 静默模式：只输出命令 stdout，无装饰文本
 	DryRun        bool   // 干跑模式：只显示将要执行的命令和目标，不实际执行
+	SSHKeyPath    string // 指定 SSH 私钥路径（-k 参数）
+	AllKeys       bool   // 尝试所有 ~/.ssh/ 下的私钥（--all-keys）
 }
 
 var GlobalFlags = &Flags{

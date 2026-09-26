@@ -62,20 +62,19 @@ func SshConnect(allHosts []*Host, moduleName string) ([]HostSession, map[string]
 
 			Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"])
 
-			// 认证方式选择
+			// 认证方式选择：免密优先（key），密码兜底，SSH 按顺序自动尝试
 			var authMethods []ssh.AuthMethod
-
+			if keyAuth, err := publicKeyAuth(config.GlobalFlags.SSHKeyPath, config.GlobalFlags.AllKeys); err == nil {
+				authMethods = append(authMethods, keyAuth)
+			}
 			if password != "" {
-				authMethods = []ssh.AuthMethod{ssh.Password(password)}
-			} else {
-				keyAuth, err := publicKeyAuth()
-				if err != nil {
-					mu.Lock()
-					failedHosts[h.Address] = ConnError{Kind: "auth", Msg: err.Error()}
-					mu.Unlock()
-					return
-				}
-				authMethods = []ssh.AuthMethod{keyAuth}
+				authMethods = append(authMethods, ssh.Password(password))
+			}
+			if len(authMethods) == 0 {
+				mu.Lock()
+				failedHosts[h.Address] = ConnError{Kind: "auth", Msg: "未找到任何可用的 SSH 认证方式（私钥和密码都不可用）"}
+				mu.Unlock()
+				return
 			}
 			sshConfig := &ssh.ClientConfig{
 				User:            user,
@@ -120,45 +119,71 @@ func SshConnect(allHosts []*Host, moduleName string) ([]HostSession, map[string]
 	return hostSessions, failedHosts
 }
 
-// publicKeyAuth 生成基于默认私钥文件的认证方法
-func publicKeyAuth() (ssh.AuthMethod, error) {
-	// 定义常见私钥路径（按优先级排序）
+// publicKeyAuth 生成 SSH 私钥认证方法
+// keyPath 非空时优先使用指定私钥；allKeys 为 true 时收集所有可用私钥由 SSH 依次尝试
+func publicKeyAuth(keyPath string, allKeys bool) (ssh.AuthMethod, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("获取用户主目录失败: %v", err)
+	}
+
+	// 1. 指定私钥路径（优先级最高）
+	if keyPath != "" {
+		signer, err := loadSigner(keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("加载指定私钥失败 %s: %v", keyPath, err)
+		}
+		return ssh.PublicKeys(signer), nil
+	}
+
+	// 2. 自动发现 ~/.ssh/ 下的常见私钥
 	privateKeys := []string{
 		"id_rsa",
 		"id_ed25519",
 		"id_ecdsa",
 		"id_dsa",
 	}
-	// 先获取用户主目录
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("获取用户主目录失败: %v", err)
+
+	if !allKeys {
+		// 默认模式：返回第一个可用的私钥（最快）
+		for _, keyName := range privateKeys {
+			keyPath := filepath.Join(homeDir, ".ssh", keyName)
+			if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+				continue
+			}
+			signer, err := loadSigner(keyPath)
+			if err != nil {
+				return nil, fmt.Errorf("解析私钥失败 %s: %v", keyPath, err)
+			}
+			return ssh.PublicKeys(signer), nil
+		}
+	} else {
+		// --all-keys 模式：收集所有可用私钥，SSH 客户端依次尝试
+		var signers []ssh.Signer
+		for _, keyName := range privateKeys {
+			keyPath := filepath.Join(homeDir, ".ssh", keyName)
+			if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+				continue
+			}
+			signer, err := loadSigner(keyPath)
+			if err != nil {
+				continue // 单个私钥解析失败不影响其他
+			}
+			signers = append(signers, signer)
+		}
+		if len(signers) > 0 {
+			return ssh.PublicKeys(signers...), nil
+		}
 	}
-	// 遍历尝试
-	for _, keyName := range privateKeys {
-		// 获取用户主目录下的私钥文件路径（默认 ~/.ssh/id_rsa）
-		keyPath := filepath.Join(homeDir, ".ssh", keyName)
-		// 检查文件是否存在
-		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-			continue // 不存在就跳过
-		}
-		// 读取私钥文件
-		key, err := os.ReadFile(keyPath)
-		if err != nil {
-			return nil, fmt.Errorf("读取私钥文件失败: %v", err)
-		}
 
-		// 解析私钥
-		signer, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			return nil, fmt.Errorf("解析私钥失败: %v", err)
-		}
-
-		// 成功解析 → 直接返回
-		return ssh.PublicKeys(signer), nil
-
-	}
-	// 所有私钥都失败
 	return nil, fmt.Errorf("未找到任何可用的SSH私钥")
+}
 
+// loadSigner 读取并解析单个私钥文件
+func loadSigner(keyPath string) (ssh.Signer, error) {
+	key, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.ParsePrivateKey(key)
 }
