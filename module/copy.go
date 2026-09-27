@@ -114,7 +114,8 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 	destRoot := strings.TrimRight(flags.Parameter["dest"], "/")
 	dryRun := config.GlobalFlags.DryRun
 	quiet := flags.Parameter["quiet"] == "true"
-	skipMd5 := flags.Parameter["skip_md5"] == "true"
+	// switch 模式自动跳过 MD5 校验（交换机无 md5sum 命令，校验必然失败），等价于自动 --skip-md5
+	skipMd5 := flags.Parameter["skip_md5"] == "true" || config.GlobalConfig.Mode == "switch"
 
 	type fileTarget struct {
 		fi         fileInfo
@@ -318,6 +319,10 @@ func (m *CopyModule) runMultiFile(hs HostSession, flags *config.Flags, jsonList 
 		fi := fileList[0]
 		targetPath := md5Results[0].ft.targetPath
 		if successCount == 1 {
+			// skip-md5（含 switch 模式）未做 MD5 比较，不能声称"内容有更新"
+			if skipMd5 {
+				return Result{Success: true, Output: fmt.Sprintf("已成功复制 %s 到 %s（跳过 MD5 校验）", fi.AbsPath, targetPath), Change: true}
+			}
 			return Result{Success: true, Output: fmt.Sprintf("已成功复制 %s 到 %s（内容有更新）", fi.AbsPath, targetPath), Change: true}
 		} else if skipCount == 1 {
 			return Result{Success: true, Output: fmt.Sprintf("文件 %s 与远程 %s 内容一致，无需复制", fi.AbsPath, targetPath), Change: false}

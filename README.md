@@ -1,47 +1,27 @@
 # fastdp
-轻量级、单二进制、无依赖的批量运维工具。在”够用就好”的尺度下，用 Go 协程的并发优势替代 Ansible 的 Python + SSH 管道开销，专注于高频运维场景（命令执行、文件传输、状态巡检）的秒级响应。
+轻量级、单二进制、无依赖的批量运维工具。在"够用就好"的尺度下，用 Go 协程的并发优势替代 Ansible 的 Python + SSH 管道开销，专注于高频运维场景（命令执行、文件传输、状态巡检）的秒级响应。
 > **fastdp 不是 Ansible 完全替代品。** 它没有 playbook、没有 facts gathering、没有变量继承体系。如果你需要复杂编排（roles、templates、idempotent modules），请使用 [Ansible](https://www.ansible.com/)。fastdp 适合"100 台机器跑条命令看结果"这种短平快的即时操作场景。
 
 ## 功能特点
-- 支持 6 大模块操作（shell / copy / fetch / script / ping / check）
-- 基于主机组的批量管理，支持组名和 IP 混合指定
-- 并发连接控制，基于 Go 协程实现高效调度
-- 支持 SSH 密码认证和密钥认证（自动查找私钥）
-- 灵活的配置文件多级加载
-- AI Agent 友好，让 fastdp 成为 AI Agent（Claude Code、Cursor、OpenCode 等）管理多台机器时的首选工具
-- 简单易用，学习成本低
+- **批量命令执行**：一行命令跑完所有目标主机，秒级返回
+- **网络设备（交换机）支持**：`--mode switch` 切换交互式 CLI 模式，适配 H3C/华为/Cisco 等设备的命令分割、分页禁用、命令清单批量下发（shell/copy/fetch/script/ping 均已适配）
+- **文件分发与拉取**：批量推送文件到远程、批量拉取远程文件（支持通配符/目录递归）
+- **批量脚本执行**：本地脚本一次发送到所有主机执行（服务器为 bash 脚本，交换机为命令清单）
+- **主机巡检**：批量采集硬件信息、系统状态，表格/JSON 多格式输出
+- **批量公钥推送**：一键完成多台机器的免密配置
+- **主机组管理**：基于主机组的批量管理，支持组名和 IP 混合指定
+- **高效并发**：基于 Go 协程实现高效调度，并发连接数可配置
+- **灵活认证**：支持 SSH 密码、密钥认证（自动查找/指定/全尝试），免密优先
+- **AI Agent 友好**：让 fastdp 成为 AI Agent（Claude Code、Cursor、OpenCode 等）管理多台机器时的首选工具
+- **简单易用**：单二进制、零依赖、学习成本低
 
-## 性能对比
+## 性能特点
 
-在相同测试场景下（对 4 台远程主机执行 `date` 命令）：
+基于 Go 原生协程（Goroutine）实现细粒度并发调度，相比多进程模型（如 Ansible 的 fork）开销更低：
 
-| 工具     | 实际耗时（real） | 性能对比       |
-|----------|------------------|----------------|
-| fastdp   | 0m0.141s         | ✔️ 快 5.6 倍   |
-| Ansible  | 0m0.787s         |                |
-
-![image-20260529175910671](./assets/ansible.png)
-
-## 为什么快？
-
-### 极致并发调度：
-- 基于 Go 原生协程（Goroutine）实现细粒度并发控制
-- 精准管理 SSH 连接生命周期
-- 避免传统多进程模型的资源浪费（如 Ansible 的 fork 开销）
-
-### 无冗余设计：
-- 摒弃复杂的兼容性逻辑和冗余配置解析
-- 专注核心运维场景，让每一次执行都「轻装上阵」
-- 上手成本低，二进制文件大小只有 8MB 左右，无任何依赖，无需处理多版本 Python 适配
-
-## 对运维的意义
-
-对于批量命令执行、主机状态巡检等高频场景，fastdp 可将分钟级操作压缩至秒级，真正实现「瞬时响应」的批量运维体验 —— 这意味着：
-
-- 巡检效率提升 10 倍以上，大规模集群操作不再漫长等待
-- 故障排查更及时，秒级反馈加速问题定位
-
-> **注**：测试环境为 4 台同网段 Linux 主机，网络延迟 <1ms；实际性能因网络环境、并发数配置略有差异，但核心优势稳定。
+- **并发调度**：Go 协程轻量，数百台主机并发无压力，响应快
+- **无冗余设计**：无解释器依赖，单二进制 ~8MB，无 Python 版本适配问题
+- **秒级反馈**：批量命令/巡检等高频场景，从分钟级压缩到秒级（实际性能因网络环境、并发数配置而异）
 
 ## 安装
 
@@ -74,7 +54,7 @@ fastdp-v6.2.0-linux-amd64/
 ├── fastdp              # 主程序（可执行）
 ├── config.toml         # 配置文件模板
 ├── host                # 主机组配置模板
-└── fastdp-check.sh     # 巡检脚本（check 模块使用）
+└── fastdp-check.sh     # 巡检脚本（check 子命令使用）
 ```
 
 请选择适合你的安装方式：
@@ -195,7 +175,7 @@ chmod +x build.sh
 3. ./config.toml              （当前目录，兜底）
 ```
 
-## 巡检脚本路径优先级（check 模块）
+## 巡检脚本路径优先级（check 子命令）
 
 ```
 1. ~/.fastdp/fastdp-check.sh  （用户自定义，优先级最高）
@@ -224,13 +204,40 @@ fastdp ping all
 
 # 环境巡检
 fastdp check all
+
+# 批量推送公钥到远程主机（免密配置）
+fastdp copy-id --ask-pass all
+
+# 查看主机组与机器列表
+fastdp list
 ```
 
-## 模块说明
+## 子命令说明
 
-### 1. shell 模块
+### 1. shell（批量命令执行）
 
 在远程主机执行 shell 命令。
+
+**交换机模式（switch）**：默认执行模式为 linux（服务器）。管理 H3C 等交换机/网络设备时，可用 `--mode switch` 或配置文件 `mode = "switch"` 切换：
+- 命令按 `;` 分割**逐条执行**（智能识别转义分号 `\;`）
+- 自动发送 `screen-length disable` 禁用分页（避免多屏输出等待按键超时）
+- **分页禁用命令三级配置**（按需覆盖）：命令行 `--paging-disable` > host 文件该主机 `paging_disable=` > config.toml `paging_disable` > 默认 `screen-length disable`。混合设备场景（如 H3C + Cisco）可在 host 文件按每台指定，互不影响：
+
+```bash
+# host 文件：H3C 用默认，Cisco 单独覆盖
+[switches]
+192.168.1.10                    # 默认 screen-length disable（H3C）
+192.168.1.20 paging_disable=terminal length 0   # Cisco
+```
+- 交互式终端执行（PTY），适配设备 CLI
+
+```bash
+# 交换机：单条命令
+fastdp shell -a "display current-configuration" switches --mode switch
+
+# 交换机：多条命令按 ; 分割（转义分号 \; 不会误拆）
+fastdp shell -a "display clock;display version" switches --mode switch
+```
 
 参数：
 - `-a` / `--args`：要执行的 shell 命令（必需）
@@ -289,19 +296,22 @@ fastdp shell -a 'rm -rf /tmp/*' master
 fastdp shell -a 'rm -rf /tmp/*' master --yes
 ```
 
-每次执行都会记录一条 JSON 执行历史（时间/用户/命令/目标主机/成败与改变计数/耗时）到执行历史日志，默认随配置文件目录（history.log），可用 history_log 配置路径。script 模块同样会扫描本地脚本内容。--no-history 参数可跳过单次记录。
+每次执行都会记录一条 JSON 执行历史（时间/用户/命令/目标主机/成败与改变计数/耗时）到执行历史日志，默认随配置文件目录（history.log），可用 history_log 配置路径。script 子命令同样会扫描本地脚本内容。--no-history 参数可跳过单次记录。
 
 ![image-20260529175910671](./assets/shell.png)
 
-### 2. copy 模块
+### 2. copy（文件分发）
 
 复制本地文件到远程主机，支持 MD5 校验（文件相同则跳过）、权限同步、多文件、目录递归。
+
+> **switch 模式**下自动跳过 MD5 校验（交换机无 `md5sum` 命令，校验必然失败），等价于自动 `--skip-md5`，走 SFTP 直传。
 
 参数：
 - `-s` / `--source`：源文件路径（可多次指定）
 - `-r` / `--recursive`：源目录路径（递归复制，可多次指定）
 - `-d` / `--dest`：远程目标路径，需为绝对路径（必需）
 - `--no-keep-dir`：不保留源顶层目录，平铺复制目录内容到目标（默认保留目录结构）
+- `--skip-md5`：跳过 MD5 校验直接传输（适用于交换机等不支持 md5sum 的设备；switch 模式自动启用）
 
 > 复制目录时，目标路径必须以 `/` 结尾
 
@@ -328,7 +338,7 @@ fastdp copy -s app.conf -r ./scripts/ -d /opt/ all
 ![image-20260529175910671](./assets/copy.png)
 > 大量文件传输推荐使用 rsync
 
-### 3. fetch 模块
+### 3. fetch（文件拉取）
 
 批量从远程主机拉取文件（基于 SFTP），支持通配符匹配和目录递归。
 
@@ -368,11 +378,11 @@ fastdp fetch -r "/var/log/app" --recursive all
 
 ![image-20260529175910671](./assets/fetch.png)
 
-### 4. script 模块
+### 4. script（批量脚本）
 
 在远程主机上批量执行本地shell脚本。
 
-> script 模块执行前会扫描脚本内容，危险命令（如 `rm -rf /`）会触发与 shell 模块相同的安全拦截/确认机制。
+> script 子命令执行前会扫描脚本内容，危险命令（如 `rm -rf /`）会触发与 shell 子命令相同的安全拦截/确认机制。switch 模式下为命令清单，自动跳过安全检查和 `.sh` 后缀警告。
 
 参数：
 - `-f` / `--file`：本地脚本路径（必需，文本文件，最大 512KB）
@@ -394,9 +404,28 @@ fastdp script -f init.sh --args "eth0 192.168.1.1" --env "MODE=persist MTU=9000"
 fastdp script -f check.sh all -q
 ```
 
+**交换机模式（switch）**：文件按**命令清单**处理而非 bash 脚本——每行一条命令逐条执行（复用 shell 的交互式 PTY 执行器，支持命令状态依赖如 `system-view`→`vlan`），自动跳过**空行**和 **`#` 注释行**：
+
+```bash
+# 命令清单示例（switch-config.txt）
+# 创建管理 VLAN
+system-view
+vlan 10
+description management-vlan
+quit
+interface vlan-interface 10
+ip address 192.168.10.1 24
+quit
+```
+
+```bash
+# 交换机：批量下发配置命令清单
+fastdp script -f switch-config.txt switches --mode switch
+```
+
 ![image-20260529175910671](./assets/script.png)
 
-### 5. ping 模块
+### 5. ping（连通性检测）
 
 测试远程主机 SSH 连通性。
 
@@ -405,17 +434,19 @@ fastdp script -f check.sh all -q
 fastdp ping all
 ```
 
-### 6. check 模块
+> **switch 模式**下探测命令自动从 `echo pong` 切换为 `display clock`（交换机 CLI 无 echo 命令，`display clock` 输出设备时间，用户视图即可执行）。
+
+### 6. check（环境巡检）
 
 批量主机环境巡检。执行巡检脚本（fastdp-check.sh）并格式化输出结果。
 
 参数：
 - `-g`：竖向格式化输出（类似 mysql \G）
-- `-f`：导出格式，支持 csv / md / html / json
+- `-f`：导出格式，支持 csv / md / html（JSON 请用全局 `-o json`）
 - `--only`：只检查指定字段（逗号分隔，如 `cpu_cores,cpu_model,mem`）
 - `-l` / `--list-fields`：列出所有可用的检查字段 key
 
-固定输出字段（18+ 标准字段，支持自定义字段）：
+**字段定义通过脚本注解驱动**：在巡检脚本中字段前加一行 `# FASTDP_FIELD: key=中文名` 注解，即可自定义中文表头、展示顺序（注解顺序即展示顺序，**主机IP 恒为第一列**），无注解的字段自动归为自定义字段追加到末尾。巡检脚本（fastdp-check.sh）是**字段定义唯一源头**，模板字段可按规则修改、移除或新增。内置字段模板（fastdp-check.sh 自带注解）：
 
 | 字段 | 说明 |
 |------|------|
@@ -451,11 +482,13 @@ fastdp check all -l
 # 竖向格式化输出
 fastdp check all -g
 
-# 导出巡检报告
+# 导出巡检报告（csv/md/html，JSON 请用 -o json）
 fastdp check all -f csv  > report.csv
 fastdp check all -f md   > report.md
 fastdp check all -f html > report.html
-fastdp check all -f json > report.json
+
+# 结构化输出（JSON，适合脚本/AI Agent）
+fastdp check all -o json
 ```
 
 **自定义字段**：编辑巡检脚本（`~/.fastdp/fastdp-check.sh` 或 `/etc/fastdp/fastdp-check.sh`），在末尾追加 `key=value` 格式即可自动识别展示：
@@ -463,6 +496,9 @@ fastdp check all -f json > report.json
 ```bash
 # 示例：添加自定义字段
 echo "my_custom_field=hello"
+
+# 可选：加注解自定义中文表头与展示顺序
+# FASTDP_FIELD: app_version=应用版本
 echo "app_version=$(cat /opt/app/VERSION)"
 ```
 
@@ -482,6 +518,50 @@ open report.csv
 生成execl表格如图所示，html和md格式同理
 
 ![image-20260529175910671](./assets/check-c.png)
+
+### 7. copy-id（批量公钥推送）
+
+批量推送 SSH 公钥到远程主机，替代逐台执行 `ssh-copy-id`，一键完成免密配置。
+
+参数：
+- `-p` / `--pub-key`：本地公钥文件路径（默认自动发现 `~/.ssh/*.pub`）
+- `--password`：统一密码（CI/CD 场景）
+- `--ask-pass`：交互输入一次密码（所有机器同一密码）
+- `--interactive`：逐台输入密码（机器密码不同时使用，串行执行，失败可重试）
+- `--dry-run`：干跑模式：只显示预览，不实际推送
+
+```bash
+# 自动发现公钥 + 用 host 文件密码批量推送
+fastdp copy-id all
+
+# 指定公钥文件 + 统一密码
+fastdp copy-id -p ~/.ssh/id_ed25519.pub --password "xxx" web
+
+# 逐台输入密码（机器密码各不相同）
+fastdp copy-id --interactive all
+
+# 干跑模式：只显示预览
+fastdp copy-id --dry-run all
+```
+
+> copy-id 内置幂等（重跑不重复追加）、权限自动设置（700/600）、失败主机 `--retry-file` 记录。
+
+### 8. list（主机组查看）
+
+无需打开 host 文件即可查看主机组与机器列表，区间写法自动展开为真实主机。
+
+```bash
+# 列出所有分组及机器
+fastdp list
+
+# 只看指定组
+fastdp list -g web
+
+# JSON 输出（AI Agent 友好）
+fastdp list -o json
+```
+
+> 默认隐藏密码，`-v` 调试模式显示。
 
 ## 配置文件
 
@@ -524,6 +604,14 @@ history_enabled = true
 
 # 执行历史日志路径（空=自动跟随配置文件目录，默认 history.log）
 history_log = ""
+
+# 执行模式：linux（服务器默认）/ switch（交换机/网络设备）
+# switch 模式下 shell 按 ; 分割逐条执行、自动禁用分页
+mode = "linux"
+
+# switch 模式分页禁用命令（默认 screen-length disable，适用于 H3C）
+# 混合设备场景可在此设全局默认，host 文件按单台覆盖（paging_disable=xxx），命令行 --paging-disable 优先级最高
+# paging_disable = "screen-length disable"
 ```
 
 ## 主机组配置
@@ -552,6 +640,7 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | user     | SSH 登录用户               | root        |
 | port     | SSH 端口                   | 22          |
 | password | SSH 登录密码（空则密钥认证）| 空（密钥）  |
+| paging_disable | switch 模式分页禁用命令（如 Cisco 用 `terminal length 0`） | 空（用默认） |
 
 ### 示例
 
@@ -583,6 +672,9 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | --retry-file  | -    | 将失败主机写入文件，便于 --limit @file 重跑 | "" |
 | --limit       | -    | 从文件读取目标主机列表（@file，常用于对失败主机重跑） | "" |
 | --output      | -o   | 输出格式：text（人类阅读）/ JSON（结构化，适合脚本和 AI Agent） | text |
+| --key         | -k   | 指定 SSH 私钥路径（默认自动发现 ~/.ssh/ 下的第一个私钥） | "" |
+| --all-keys    | -    | 尝试 ~/.ssh/ 下所有私钥（适用于多机器使用不同私钥的场景，性能会下降） | false |
+| --mode        | -    | 执行模式：linux / switch（默认 linux，交换机/网络设备用 switch） | linux |
 | --dry-run     | -    | 干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览） | false |
 | --version     | -V   | 显示版本信息                       | false  |
 | --help        | -h   | 查看帮助信息                       | -      |
@@ -592,14 +684,14 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | 退出码 | 含义 | 处理建议 |
 | ------ | ---- | -------- |
 | 0 | 全部成功 | — |
-| 1 | 部分失败（模块执行失败） | 查看 stderr 判断原因 |
+| 1 | 部分失败（子命令执行失败） | 查看 stderr 判断原因 |
 | 2 | 参数/配置错误 | 修正命令或配置 |
 | 3 | 连接失败 | 检查目标机网络/sshd |
 | 4 | 超时 | 增大 --timeout 后重跑 |
 | 5 | 认证失败 | 检查 SSH 凭据 |
 | 6 | 程序内部错误 | 上报 bug |
 
-## 模板变量（shell / script 模块）
+## 模板变量（shell / script 子命令）
 
 命令中可使用模板变量，fastdp 会在执行前替换为当前主机的实际值：
 
@@ -618,7 +710,7 @@ fastdp shell -a 'echo {{.ip}} $(hostname)' all -q >> /etc/hosts
 fastdp script -f init.sh --args "{{.ip}}" all
 ```
 
-## 主机区间展开（所有模块通用）
+## 主机区间展开（所有子命令通用）
 
 目标主机/组参数支持 `[start:end:step]` 区间表达式，shell/copy/fetch/script/ping/check 均可用：
 
@@ -697,7 +789,7 @@ fastdp [tab][tab]
 6. **退出码**：
     - 0=全部成功、1=部分失败、2=参数错误、3=连接失败、4=超时、5=认证失败、6=内部错误
     - 脚本和 AI Agent 可根据退出码决定重试策略
-7. **check 模块**：
+7. **check 子命令**：
      - 巡检脚本路径：`~/.fastdp/fastdp-check.sh` > `/etc/fastdp/fastdp-check.sh`
      - 可自行编辑脚本内容，输出 `key=value` 格式即可自动识别
 8. **权限说明**：
@@ -708,5 +800,5 @@ fastdp [tab][tab]
 
 ## 帮助与反馈
 
-- 查看命令帮助：`fastdp --help` 或 `fastdp [模块名] --help`
+- 查看命令帮助：`fastdp --help` 或 `fastdp [子命令] --help`
 - 提交 issue：[Gitee](https://gitee.com/zhao-pengfei2/fastdp/issues) \| [GitHub](https://github.com/perfect12312645/fastdp/issues)

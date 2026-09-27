@@ -26,7 +26,7 @@ var rootCmd = &cobra.Command{
 	Use:   "fastdp",
 	Short: "轻量级批量运维工具（Ansible 风格，单二进制无依赖）",
 	Long: `fastdp 在指定主机组上批量执行运维操作。特点：单二进制无依赖、Go 协程并发、SSH 协议。
-支持模块：shell（执行命令）、copy（文件传输）、fetch（远程拉取）、script（批量脚本）、ping（连通性）、check（环境巡检）。
+支持：批量命令执行、文件分发与拉取、批量脚本执行、主机巡检、批量公钥推送、连通性检测。
 主机组通过配置文件中的 host_inventory 指定，支持 [N:M:step] 区间展开。`,
 	Example: `
   # 在 web 组执行命令
@@ -68,6 +68,13 @@ var rootCmd = &cobra.Command{
 		config.GlobalFlags.DryRun, _ = cmd.Flags().GetBool("dry-run")
 		config.GlobalFlags.SSHKeyPath, _ = cmd.Flags().GetString("key")
 		config.GlobalFlags.AllKeys, _ = cmd.Flags().GetBool("all-keys")
+		// 执行模式：命令行 --mode > 配置文件 mode > 默认 linux
+		if mode, _ := cmd.Flags().GetString("mode"); mode != "" {
+			config.GlobalConfig.Mode = mode
+		}
+		if config.GlobalConfig.Mode == "" {
+			config.GlobalConfig.Mode = "linux"
+		}
 		inventoryPath, _ := cmd.Flags().GetString("inventory")
 		if inventoryPath != "" {
 			// 命令行传了，覆盖配置文件
@@ -119,9 +126,10 @@ func init() {
 	rootCmd.PersistentFlags().Bool("dry-run", false, "干跑模式：只显示将要执行的命令和目标主机，不实际执行（安全预览）")
 	rootCmd.PersistentFlags().StringP("key", "k", "", "指定 SSH 私钥路径（默认自动发现 ~/.ssh/ 下的第一个私钥）")
 	rootCmd.PersistentFlags().Bool("all-keys", false, "尝试 ~/.ssh/ 下所有私钥（适用于多机器使用不同私钥的场景，性能会下降）")
+	rootCmd.PersistentFlags().StringP("mode", "", "", "执行模式：linux / switch（默认 linux，交换机/网络设备用 switch）")
 
 	// 添加子命令
-	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd, copyIdCmd)
+	rootCmd.AddCommand(shellCmd, copyCmd, pingCmd, scriptCmd, checkCmd, fetchCmd, copyIdCmd, listCmd)
 
 }
 
@@ -283,6 +291,12 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 
 	// check 模块触发表格美化
 	if modName == "check" {
+		// check 的 -o json：输出字段 map 结构巡检报告（区别于其他模块的通用执行结果）
+		if flags.Output == "json" {
+			outputCheckJSON(addrs, results)
+			writeRetryFile(flags, results, addrs)
+			return computeExitCode(failedHosts, results)
+		}
 		PolishOutput(addrs, results)
 		writeRetryFile(flags, results, addrs)
 		return computeExitCode(failedHosts, results)
@@ -549,29 +563,15 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 	isVertical := config.GlobalFlags.Parameter["vertical"] == "true"
 	outputFormat := config.GlobalFlags.Parameter["format"]
 
-	// 预定义所有要展示的字段（顺序固定）
-	standardFields := []struct {
-		key  string
-		name string
-	}{
-		{"hostname", "主机名"},
-		{"virt", "虚拟化"},
-		{"os", "系统版本"},
-		{"kernel", "内核"},
-		{"cpu_cores", "CPU核心"},
-		{"cpu_model", "CPU型号"},
-		{"arch", "架构"},
-		{"mem", "内存"},
-		{"net", "网卡"},
-		{"gateway", "网关"},
-		{"disk", "磁盘"},
-		{"firewall", "防火墙"},
-		{"selinux", "SELinux"},
-		{"swap", "Swap"},
-		{"timezone", "时区"},
-		{"sys_time", "系统时间"},
-		{"hw_time", "硬件时间"},
-		{"gpu", "GPU"},
+	// 从巡检脚本解析字段注解（# FASTDP_FIELD: key=中文名），替代硬编码
+	// 注解顺序决定展示顺序；无注解的 key 自动归为自定义字段
+	standardFields := []struct{ key, name string }{}
+	if scriptPath := getCheckScriptPath(); scriptPath != "" {
+		if fields, err := ParseCheckFields(scriptPath); err == nil {
+			for _, f := range fields {
+				standardFields = append(standardFields, struct{ key, name string }{f.Key, f.Name})
+			}
+		}
 	}
 
 	// 标准字段 key 集合（用于快速判断）
@@ -728,23 +728,6 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 	case "html":
 		htmlContent := renderHTML(t)
 		fmt.Println(htmlContent)
-	case "json":
-		// JSON 输出：包含所有主机（成功主机含字段数据，失败主机含 _error）
-		jsonData := make(map[string]map[string]string)
-		for _, ip := range addrs {
-			res := results[ip]
-			if res.Success {
-				jsonData[ip] = hostDataCache[ip]
-			} else {
-				jsonData[ip] = map[string]string{"_error": res.Error}
-			}
-		}
-		jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
-		if err != nil {
-			Errorf("JSON 序列化失败: %v", err)
-			return
-		}
-		fmt.Println(string(jsonBytes))
 	default:
 		// 默认终端表格（圆角样式）
 		t.SetOutputMirror(os.Stdout)
@@ -752,6 +735,27 @@ func PolishOutput(addrs []string, results map[string]module.Result) {
 		t.Style().Format.Header = text.FormatDefault
 		t.Render()
 	}
+}
+
+// outputCheckJSON 输出 check 结果的字段 map 结构 JSON：
+// { "IP": {"hostname":"...", "mem":"...", ...}, ... }，失败主机含 _error
+// 用于 -o json（check 专有，区别于其他模块的通用执行结果结构）
+func outputCheckJSON(addrs []string, results map[string]module.Result) {
+	jsonData := make(map[string]map[string]string)
+	for _, ip := range addrs {
+		res := results[ip]
+		if res.Success {
+			jsonData[ip] = parseCheckOutput(res.Output)
+		} else {
+			jsonData[ip] = map[string]string{"_error": res.Error}
+		}
+	}
+	jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
+	if err != nil {
+		Errorf("JSON 序列化失败: %v", err)
+		return
+	}
+	fmt.Println(string(jsonBytes))
 }
 func renderHTML(t table.Writer) string {
 	htmlTable := t.RenderHTML()

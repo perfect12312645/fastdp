@@ -26,3 +26,11 @@ history_enabled = true
 
 # 执行历史日志路径（空=自动跟随配置文件目录，默认 history.log）
 history_log = ""
+
+# 执行模式：linux（服务器默认）/ switch（交换机/网络设备）
+# switch 模式下 shell 按 ; 分割逐条执行、自动禁用分页
+mode = "linux"
+
+# switch 模式分页禁用命令（默认 screen-length disable，适用于 H3C）
+# 混合设备场景可在这里设全局默认，host 文件按单台覆盖（paging_disable=xxx），命令行 --paging-disable 优先级最高
+# paging_disable = "screen-length disable"

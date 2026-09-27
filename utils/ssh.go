@@ -16,6 +16,7 @@ type HostSession struct {
 	Client  *ssh.Client  // SSH 客户端
 	Session *ssh.Session // 一次 SSH 会话
 	Addr    string       // 主机地址（如 "192.168.1.1:22"）
+	Params  map[string]string // 主机参数（user/port/password 及扩展参数，如 paging_disable）
 }
 
 type ConnError struct {
@@ -110,6 +111,7 @@ func SshConnect(allHosts []*Host, moduleName string) ([]HostSession, map[string]
 				Client:  client,
 				Session: session,
 				Addr:    h.Address,
+				Params:  h.Params,
 			})
 			mu.Unlock()
 		}(host) // 将当前host作为参数传入

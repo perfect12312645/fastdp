@@ -17,6 +17,8 @@ type ConfigList struct {
 	DefaultFetchPath   string
 	HistoryEnabled     bool   // 执行历史日志开关
 	HistoryLog         string // 执行历史日志路径
+	Mode               string // 执行模式: linux / switch（默认 linux）
+	PagingDisable      string // switch 模式分页禁用命令（优先级低于命令行 flag 和 host 主机参数）
 }
 
 var GlobalConfig *ConfigList
@@ -105,6 +107,15 @@ func ParseConfig(configFile string) (*ConfigList, error) {
 	if cfg.HistoryLog == "" {
 		cfg.HistoryLog = filepath.Join(filepath.Dir(absPath), "history.log")
 	}
+
+	// 执行模式：linux / switch，默认 linux
+	cfg.Mode = viper.GetString("mode")
+	if cfg.Mode == "" {
+		cfg.Mode = "linux"
+	}
+
+	// switch 模式分页禁用命令（config.toml 全局配置，优先级低于命令行 flag 和 host 主机参数）
+	cfg.PagingDisable = viper.GetString("paging_disable")
 
 	GlobalConfig = cfg
 	return cfg, nil

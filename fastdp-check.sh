@@ -3,7 +3,9 @@
 # fastdp 主机巡检脚本 - 标准输出格式：key=value
 #
 # 【规则】
-# 1. 内置字段：工具固定解析，中文名称、有序展示、格式化输出
+# 1. 字段注解：字段前加 "# FASTDP_FIELD: key=中文名" 注解，自定义中文表头与展示顺序
+#    注解顺序即表格列顺序；无注解的字段自动归为自定义字段，按字母序追加末尾
+#    示例：echo "mem=$(...)" 前加一行 "# FASTDP_FIELD: mem=内存"
 # 2. 自定义字段：只需追加 echo "key=value"，工具自动识别展示
 # 3. 多行检查项：用 # BEGIN key 和 # END key 包裹，支持 --only 选择性执行
 #    单行检查项：直接写 echo "key=value"，工具自动从 echo 语句解析 key
@@ -12,35 +14,49 @@
 #   fastdp check all --only hostname,os    # 只执行 hostname 和 os 的检查
 #   fastdp check all -l                     # 列出所有可用的字段 key
 #
+# 【输出格式】
+#   fastdp check all                        # 默认表格（列顺序=注解顺序）
+#   fastdp check all -f csv|md|html         # 导出巡检报告（JSON 请用 -o json）
+#   fastdp check all -o json                # 字段 map 结构化输出（给脚本/AI Agent）
+#
 #===============================================================================
 
 #===============================================================================
-# ===================== 【内置标准字段 - 请勿修改/删除】=====================
-# 说明：以下为工具固定解析字段，修改可能导致展示异常
+# ===================== 【内置字段模板】=====================
+# 说明：以下为内置字段模板（含 FASTDP_FIELD 注解），可按规则修改、移除或新增自定义字段
+# 展示顺序 = 注解顺序，主机IP 恒为第一列
 #===============================================================================
 
 # 主机名
+# FASTDP_FIELD: hostname=主机名
 echo "hostname=$(hostname)"
 
 # 操作系统版本
+# FASTDP_FIELD: os=系统版本
 echo "os=$(cat /etc/os-release | grep -E '^PRETTY_NAME' | awk -F= '{print $2}' | sed 's/"//g' | head -1)"
 
 # 虚拟化类型：vmware / kvm / physical
+# FASTDP_FIELD: virt=虚拟化
 echo "virt=$(systemd-detect-virt 2>/dev/null || echo "physical")"
 
 # CPU 核心数
+# FASTDP_FIELD: cpu_cores=CPU核心
 echo "cpu_cores=$(grep -c processor /proc/cpuinfo)"
 
 # CPU 型号（型号中可能含冒号，如 "Hygon C86-4G (OPN: ...)"，取冒号后全部内容）
+# FASTDP_FIELD: cpu_model=CPU型号
 echo "cpu_model=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs)"
 
 # 系统架构
+# FASTDP_FIELD: arch=架构
 echo "arch=$(uname -m)"
 
 # 内核版本
+# FASTDP_FIELD: kernel=内核
 echo "kernel=$(uname -r)"
 
 # 内存大小
+# FASTDP_FIELD: mem=内存
 echo "mem=$(free -h | awk '/^Mem:/{print $2}')"
 
 # BEGIN disk
@@ -51,6 +67,7 @@ disk_info=$(lsblk -d -n -o NAME,SIZE,ROTA | grep -Ev '^loop|^dm-|^sr[0-9]|^zram|
     else if ($3 == 1) type = "HDD"
     printf "%s:%s:%s,", $1, $2, type
 }' | sed 's/,$//')
+# FASTDP_FIELD: disk=磁盘
 echo "disk=$disk_info"
 # END disk
 
@@ -63,6 +80,7 @@ else
     fw_status="inactive"
     fw_enable="disabled"
 fi
+# FASTDP_FIELD: firewall=防火墙
 echo "firewall=${fw_status}/${fw_enable}"
 # END firewall
 
@@ -75,20 +93,25 @@ else
 fi
 selinux_config="Disabled"
 [ -f /etc/selinux/config ] && selinux_config=$(grep -E '^SELINUX=' /etc/selinux/config | awk -F= '{print $2}')
+# FASTDP_FIELD: selinux=SELinux
 echo "selinux=${selinux_current}/${selinux_config}"
 # END selinux
 
 # 交换分区
+# FASTDP_FIELD: swap=Swap
 echo "swap=$(free -h | awk '/^Swap:/{print $2}')"
 
 # 时区
+# FASTDP_FIELD: timezone=时区
 echo "timezone=$(timedatectl show -p Timezone --value 2>/dev/null || echo "unknown")"
 
 # 系统时间
+# FASTDP_FIELD: sys_time=系统时间
 echo "sys_time=$(date +"%Y-%m-%d %H:%M:%S")"
 
 # 硬件时间（需要 root 权限）
 hw_out=$(hwclock -r 2>/dev/null)
+# FASTDP_FIELD: hw_time=硬件时间
 echo "hw_time=${hw_out:-unknown}"
 
 # BEGIN gpu
@@ -237,6 +260,7 @@ awk '{print $NF" "$2}' | sort -u | while read -r iface addr; do
     fi
     echo "${iface}:${addr}:${spd}"
 done | tr '\n' ',' | sed 's/,$//')
+# FASTDP_FIELD: net=网卡
 echo "net=$net"
 # END net
 
@@ -244,6 +268,7 @@ echo "net=$net"
 # 默认网关
 gateway=$(ip route show default 2>/dev/null | awk '/default/ {print $3}' | head -1)
 [ -z "$gateway" ] && gateway="none"
+# FASTDP_FIELD: gateway=网关
 echo "gateway=$gateway"
 # END gateway
 

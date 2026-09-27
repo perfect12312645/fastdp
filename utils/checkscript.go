@@ -79,3 +79,38 @@ func ExtractKeyFromEcho(line string) string {
 	}
 	return ""
 }
+
+// Field 巡检字段定义（key + 中文显示名）
+type Field struct {
+	Key  string
+	Name string
+}
+
+// fieldAnnotationRegex 匹配 "# FASTDP_FIELD: key=中文名" 注解
+var fieldAnnotationRegex = regexp.MustCompile(`^#\s*FASTDP_FIELD:\s*(\S+?)\s*=\s*(.+)$`)
+
+// ParseCheckFields 从巡检脚本解析字段注解（# FASTDP_FIELD: key=中文名）
+// 返回按注解出现顺序排序的字段列表。无注解的 key 不在此列表，归为自定义字段。
+func ParseCheckFields(scriptPath string) ([]Field, error) {
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var fields []Field
+	seen := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		m := fieldAnnotationRegex.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		key := strings.TrimSpace(m[1])
+		name := strings.TrimSpace(m[2])
+		if key == "" || seen[key] {
+			continue // 忽略空 key 或重复注解（首个生效）
+		}
+		seen[key] = true
+		fields = append(fields, Field{Key: key, Name: name})
+	}
+	return fields, nil
+}

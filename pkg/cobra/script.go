@@ -44,7 +44,8 @@ var scriptCmd = &cobra.Command{
 			return fmt.Errorf("禁止上传二进制文件，请传入纯文本脚本 → %s", scriptPath)
 		}
 
-		if !strings.HasSuffix(scriptPath, ".sh") {
+		// switch 模式：文件是命令清单而非 bash 脚本，跳过 .sh 后缀警告
+		if !strings.HasSuffix(scriptPath, ".sh") && config.GlobalConfig.Mode != "switch" {
 			fmt.Fprintf(cmd.ErrOrStderr(), "⚠️  警告: 文件非 .sh 后缀 → %s\n", scriptPath)
 		}
 
@@ -113,10 +114,10 @@ var scriptCmd = &cobra.Command{
 			os.Exit(exitcode.Success)
 		}
 
- 		// 脚本内容安全检查：硬拦截 / 确认
+ 		// 脚本内容安全检查：硬拦截 / 确认（switch 模式为命令清单，无 bash 破坏性命令语义，跳过）
 		yes, _ := cmd.Flags().GetBool("yes")
 		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
-		if !enforceCommandSafety(string(content), execHosts, yes, allowDangerous) {
+		if config.GlobalConfig.Mode != "switch" && !enforceCommandSafety(string(content), execHosts, yes, allowDangerous) {
 			os.Exit(exitcode.ParamError)
 		}
 

@@ -7,6 +7,8 @@
 #   user      - 登录用户名（默认：root）
 #   port      - SSH端口（默认：22）
 #   password  - 登录密码（如不指定，需提前设置SSH免密登录）
+#   paging_disable - switch 模式分页禁用命令（默认 screen-length disable，混合设备按需覆盖：
+#                    Cisco: terminal length 0 / Huawei: screen-length 0 temporary）
 
 # ============================================================
 # 主机区间展开（支持 [start:end:step]，零填充自动识别）

@@ -25,7 +25,13 @@ func (m *ScriptModule) Run(hs HostSession, flags *config.Flags) Result {
 	// 替换模板变量 {{.ip}} {{.port}} {{.user}}
 	contentStr = ReplaceTemplate(contentStr, hs)
 
-	// 准备输出
+	// switch 模式（交换机/网络设备）：命令清单文件按行逐条执行
+	// 交换机无 bash，不能 heredoc 执行；命令有状态依赖（system-view→vlan 需同一会话），走交互式 shell
+	if config.GlobalConfig.Mode == "switch" {
+		return m.runSwitchMode(hs, contentStr, flags)
+	}
+
+	// linux 模式（默认）：heredoc 交给 bash 执行
 	var stdout, stderr bytes.Buffer
 	hs.Session.Stdout = &stdout
 	hs.Session.Stderr = &stderr
@@ -69,6 +75,22 @@ func (m *ScriptModule) Run(hs HostSession, flags *config.Flags) Result {
 		Error:   "",
 		Change:  true,
 	}
+}
+
+// runSwitchMode 交换机命令清单执行：按行解析（跳过空行和 # 注释行），复用公共 PTY 执行器
+func (m *ScriptModule) runSwitchMode(hs HostSession, content string, flags *config.Flags) Result {
+	var commands []string
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		commands = append(commands, line)
+	}
+	if len(commands) == 0 {
+		return Result{Success: false, Error: "命令清单为空（无有效命令行）", Change: false}
+	}
+	return runSwitchCommands(hs, commands, flags)
 }
 
 func init() {

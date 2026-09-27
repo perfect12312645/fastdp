@@ -40,9 +40,9 @@ var checkCmd = &cobra.Command{
 			return fmt.Errorf("参数冲突：-g（竖向输出）和 -f（导出格式）不能同时使用")
 		}
 		if format != "" {
-			validFormats := map[string]bool{"csv": true, "md": true, "html": true, "json": true}
+			validFormats := map[string]bool{"csv": true, "md": true, "html": true}
 			if !validFormats[format] {
-				return fmt.Errorf("无效格式：%s，合法值：csv|md|html|json", format)
+				return fmt.Errorf("无效格式：%s，合法值：csv|md|html（JSON 请用全局 -o json）", format)
 			}
 		}
 		return nil
@@ -110,15 +110,19 @@ var checkCmd = &cobra.Command{
   # 竖向格式化输出
   fastdp check all -g
 
-  # 导出巡检报告
+  # 导出巡检报告（csv/md/html，JSON 请用 -o json）
   fastdp check all -f csv  > report.csv
-  fastdp check all -f json > report.json
+  fastdp check all -f md   > report.md
+  fastdp check all -f html > report.html
+
+  # 结构化输出（JSON，适合脚本/AI Agent）
+  fastdp check all -o json
 `,
 }
 
 func init() {
 	checkCmd.Flags().BoolP("vertical", "g", false, "竖向格式化输出 (类似 mysql \\G)")
-	checkCmd.Flags().StringP("format", "f", "", "输出格式: csv|md|html|json")
+	checkCmd.Flags().StringP("format", "f", "", "输出格式: csv|md|html（JSON 请用全局 -o json）")
 	checkCmd.Flags().String("only", "", "只检查指定字段（逗号分隔，如 hostname,os,mem）")
 	checkCmd.Flags().BoolP("list-fields", "l", false, "列出所有可用的检查字段 key")
 }

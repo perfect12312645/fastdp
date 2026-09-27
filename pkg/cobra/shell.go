@@ -31,6 +31,10 @@ var shellCmd = &cobra.Command{
 		config.GlobalFlags.HostInventory = args
 		aValue, _ := cmd.Flags().GetString("args")
 		config.GlobalFlags.Parameter["args"] = aValue
+		pagingDisable, _ := cmd.Flags().GetString("paging-disable")
+		if pagingDisable != "" {
+			config.GlobalFlags.Parameter["paging_disable"] = pagingDisable
+		}
 		aggregate, _ := cmd.Flags().GetString("aggregate")
 		if aggregate != "" {
 			config.GlobalFlags.Parameter["aggregate"] = aggregate
@@ -60,7 +64,8 @@ var shellCmd = &cobra.Command{
 
 		yes, _ := cmd.Flags().GetBool("yes")
 		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
-		if !enforceCommandSafety(aValue, execHosts, yes, allowDangerous) {
+		// switch 模式为设备 CLI 命令，无 bash 破坏性命令语义，跳过安全检查
+		if config.GlobalConfig.Mode != "switch" && !enforceCommandSafety(aValue, execHosts, yes, allowDangerous) {
 			os.Exit(exitcode.ParamError)
 		}
 
@@ -103,6 +108,7 @@ func init() {
 	shellCmd.Flags().StringP("args", "a", "", "要执行的 shell 命令 (必需)")
 	_ = shellCmd.MarkFlagRequired("args")
 	shellCmd.Flags().String("aggregate", "", "聚合函数：avg/max/min/sum/median/p95/p99/stddev")
+	shellCmd.Flags().String("paging-disable", "", "交换机分页禁用命令（switch 模式，默认 screen-length disable）")
 	shellCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
 	shellCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")
 	shellCmd.Flags().BoolP("summary", "s", false, "汇总模式：只显示失败主机，成功主机折叠为一行")
