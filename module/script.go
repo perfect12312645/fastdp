@@ -78,7 +78,20 @@ func (m *ScriptModule) Run(hs HostSession, flags *config.Flags) Result {
 }
 
 // runSwitchMode 交换机命令清单执行：按行解析（跳过空行和 # 注释行），复用公共 PTY 执行器
+// --env 在 switch 模式下作为模板变量注入：--env "vlan_id=10 name=mgmt" → 清单中的 {{.vlan_id}} {{.name}} 被替换
+// （与 linux 模式的 export 语义不同：交换机 CLI 无环境变量概念）
 func (m *ScriptModule) runSwitchMode(hs HostSession, content string, flags *config.Flags) Result {
+	// 模板变量替换：--env "k=v" → {{.k}} → v（在 ReplaceTemplate 内置变量之后，用户变量可覆盖内置）
+	scriptEnv := strings.TrimSpace(flags.Parameter["script_env"])
+	if scriptEnv != "" {
+		for _, pair := range strings.Fields(scriptEnv) {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) == 2 && kv[0] != "" {
+				content = strings.ReplaceAll(content, "{{."+strings.TrimSpace(kv[0])+"}}", kv[1])
+			}
+		}
+	}
+
 	var commands []string
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)

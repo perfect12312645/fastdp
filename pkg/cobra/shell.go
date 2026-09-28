@@ -39,6 +39,9 @@ var shellCmd = &cobra.Command{
 		if aggregate != "" {
 			config.GlobalFlags.Parameter["aggregate"] = aggregate
 		}
+		if diff, _ := cmd.Flags().GetBool("diff"); diff {
+			config.GlobalFlags.Parameter["diff"] = "true"
+		}
  		summary, _ := cmd.Flags().GetBool("summary")
 		if summary {
 			config.GlobalFlags.Parameter["summary"] = "true"
@@ -108,6 +111,7 @@ func init() {
 	shellCmd.Flags().StringP("args", "a", "", "要执行的 shell 命令 (必需)")
 	_ = shellCmd.MarkFlagRequired("args")
 	shellCmd.Flags().String("aggregate", "", "聚合函数：avg/max/min/sum/median/p95/p99/stddev")
+	shellCmd.Flags().Bool("diff", false, "差异分组：按输出内容分组，相同输出的主机为一组（一致性检查）")
 	shellCmd.Flags().String("paging-disable", "", "交换机分页禁用命令（switch 模式，默认 screen-length disable）")
 	shellCmd.Flags().BoolP("yes", "y", false, "危险命令自动确认（CI场景）")
 	shellCmd.Flags().Bool("allow-dangerous", false, "显式放行硬拦截的破坏性命令（不建议）")

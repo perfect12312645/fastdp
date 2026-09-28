@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	Version = "v6.2.0"
+	Version = "v6.3.0"
 )
 var rootCmd = &cobra.Command{
 	Use:   "fastdp",
@@ -307,14 +307,21 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 	// 汇总模式：只显示失败主机详情，成功主机折叠为一行
 	isSummary := flags.Parameter["summary"] == "true"
 
-	// 	JSON 输出模式
+	// JSON 输出模式
 	if flags.Output == "json" {
 		outputJSON(addrs, results)
 		writeRetryFile(flags, results, addrs)
 		return exitcode.Success
 	}
 
- 	// -q 优先于 -s：当 -q 存在时，跳过汇总模式，走原始输出路径
+	// 差异分组模式（--diff）：按输出内容分组，相同输出归一组；多数组置顶
+	if flags.Parameter["diff"] == "true" && !config.GlobalFlags.Quiet {
+		outputDiff(addrs, results)
+		writeRetryFile(flags, results, addrs)
+		return computeExitCode(failedHosts, results)
+	}
+
+	// -q 优先于 -s：当 -q 存在时，跳过汇总模式，走原始输出路径
 	if isSummary && !config.GlobalFlags.Quiet {
 		// 汇总模式输出
 		okCount := 0
@@ -521,6 +528,61 @@ func outputJSON(addrs []string, results map[string]module.Result) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(out)
+}
+
+// outputDiff 差异分组输出（--diff）：按 输出内容 分组，相同输出归一组
+// 组按主机数降序（多数组置顶），失败主机单独红字列出
+func outputDiff(addrs []string, results map[string]module.Result) {
+	// 1. 拆分成功/失败
+	type grp struct {
+		hosts  []string
+		output string
+	}
+	var failedAddrs []string
+	groupByOut := make(map[string]*grp)
+	var order []string // 保持组输出首次出现顺序，便于稳定排序
+	for _, addr := range addrs {
+		r := results[addr]
+		if !r.Success {
+			failedAddrs = append(failedAddrs, addr)
+			continue
+		}
+		key := r.Output
+		if g, ok := groupByOut[key]; ok {
+			g.hosts = append(g.hosts, addr)
+		} else {
+			groupByOut[key] = &grp{hosts: []string{addr}, output: r.Output}
+			order = append(order, key)
+		}
+	}
+
+	// 2. 按组内主机数降序排序（多数组置顶）
+	sort.SliceStable(order, func(i, j int) bool {
+		return len(groupByOut[order[i]].hosts) > len(groupByOut[order[j]].hosts)
+	})
+
+	// 3. 输出各组（成功主机按组展示，全绿）
+	total := len(addrs)
+	for _, key := range order {
+		g := groupByOut[key]
+		hostList := strings.Join(g.hosts, ", ")
+		output := strings.TrimSpace(g.output)
+		if output == "" {
+			output = "(无输出)"
+		}
+		Changedf("%d/%d 台 → %s 执行成功 output:\n%s", len(g.hosts), total, hostList, output)
+	}
+
+	// 4. 失败主机
+	if len(failedAddrs) > 0 {
+		Errorf("─── 失败主机（%d/%d） ───", len(failedAddrs), total)
+		for _, addr := range failedAddrs {
+			r := results[addr]
+			Errorf("host:%s 执行失败\nSTDOUT:%s\nSTDERR:%s\n", addr, r.Output, r.Error)
+		}
+	}
+
+	fmt.Println(SummaryLine(len(addrs)-len(failedAddrs), len(failedAddrs), total))
 }
 
 func writeRetryFile(flags *config.Flags, results map[string]module.Result, addrs []string) {

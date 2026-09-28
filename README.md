@@ -33,24 +33,26 @@
 
 | 平台 | 架构 | 下载地址 |
 |------|------|---------|
-| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.tar.gz) |
-| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-arm64.tar.gz) |
-| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-amd64.tar.gz) |
-| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-darwin-arm64.tar.gz) |
+| Linux | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-amd64.tar.gz) |
+| Linux | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-arm64.tar.gz) |
+| macOS | amd64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-darwin-amd64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-darwin-amd64.tar.gz) |
+| macOS | arm64 | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-darwin-arm64.tar.gz) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-darwin-arm64.tar.gz) |
 
 #### RPM / DEB 包
 
 | 平台 | 架构 | 包类型 | 下载地址 |
 |------|------|--------|---------|
-| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-6.2.0-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-6.2.0-1.ky10.x86_64.rpm) |
-| Linux | x86_64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/fastdp-v6.2.0-linux-amd64.deb) |
+| Linux | x86_64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-6.3.0-1.ky10.x86_64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-6.3.0-1.ky10.x86_64.rpm) |
+| Linux | arm64 | RPM | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-6.3.0-1.ky10.aarch64.rpm) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-6.3.0-1.ky10.aarch64.rpm) |
+| Linux | x86_64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-amd64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-amd64.deb) |
+| Linux | arm64 | DEB | [Gitee](https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-arm64.deb) \| [GitHub](https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/fastdp-v6.3.0-linux-arm64.deb) |
 
-> **注意：** 包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。
+> **注意：** 包名中的 `ky10` 是构建环境所致，实际无任何系统依赖，可在 CentOS / Rocky / openEuler 等主流发行版上正常安装使用。arm64 版 RPM 命名使用 `aarch64`（RPM 系惯例）。
 
 tar.gz 包内容：
 
 ```
-fastdp-v6.2.0-linux-amd64/
+fastdp-v6.3.0-linux-amd64/
 ├── fastdp              # 主程序（可执行）
 ├── config.toml         # 配置文件模板
 ├── host                # 主机组配置模板
@@ -64,7 +66,7 @@ fastdp-v6.2.0-linux-amd64/
 
 ```bash
 # 安装（需要 root 权限）
-sudo rpm -ivh fastdp-6.2.0-1.ky10.x86_64.rpm
+sudo rpm -ivh fastdp-6.3.0-1.ky10.x86_64.rpm
 
 # 安装完成后即可使用
 fastdp --help
@@ -74,7 +76,7 @@ fastdp --help
 
 ```bash
 # 安装（需要 root 权限）
-sudo dpkg -i fastdp-v6.2.0-linux-amd64.deb
+sudo dpkg -i fastdp-v6.3.0-linux-amd64.deb
 
 # 安装完成后即可使用
 fastdp --help
@@ -99,10 +101,10 @@ vim ~/.fastdp/config.toml
 
 ```bash
 # 解压
-tar -zxvf fastdp-v6.2.0-linux-amd64.tar.gz
+tar -zxvf fastdp-v6.3.0-linux-amd64.tar.gz
 
 # 进入目录
-cd fastdp-v6.2.0-linux-amd64
+cd fastdp-v6.3.0-linux-amd64
 
 # 安装到系统路径（需要 sudo）
 sudo mv fastdp /usr/local/bin/
@@ -120,10 +122,10 @@ sudo fastdp --help
 
 ```bash
 # 解压
-tar -zxvf fastdp-v6.2.0-linux-amd64.tar.gz
+tar -zxvf fastdp-v6.3.0-linux-amd64.tar.gz
 
 # 进入目录
-cd fastdp-v6.2.0-linux-amd64
+cd fastdp-v6.3.0-linux-amd64
 
 # 复制到家目录
 mkdir -p ~/.fastdp/bin
@@ -160,9 +162,9 @@ sudo cp fastdp /usr/local/bin/
 
 # 或使用构建脚本打发布包（自动下载源码并构建 tar.gz / rpm / deb）
 # Gitee
-wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.2.0/build.sh
+wget https://gitee.com/zhao-pengfei2/fastdp/releases/download/v6.3.0/build.sh
 # 或 GitHub
-wget https://github.com/perfect12312645/fastdp/releases/download/v6.2.0/build.sh
+wget https://github.com/perfect12312645/fastdp/releases/download/v6.3.0/build.sh
 chmod +x build.sh
 ./build.sh
 ```
@@ -255,6 +257,7 @@ fastdp shell -a "display clock;display version" switches --mode switch
 参数：
 - `-a` / `--args`：要执行的 shell 命令（必需）
 - `--aggregate`：聚合函数：avg/max/min/sum/median/p95/p99/stddev（对命令输出的数字进行跨机聚合）
+- `--diff`：差异分组：按输出内容分组，相同输出的主机归为一组，多数组置顶（一致性检查/配置漂移排查）
 - `-y` / `--yes`：危险命令自动确认（CI 场景）
 - `--allow-dangerous`：显式放行硬拦截的破坏性命令（不建议）
 - `-s` / `--summary`：汇总模式（只显示失败主机，成功主机折叠为一行）
@@ -290,6 +293,25 @@ fastdp shell -a "cat /proc/loadavg | awk '{print \$1}'" all --aggregate stddev
 
 # 中位数 CPU 使用率（不受极端值影响）
 fastdp shell -a "mpstat 1 1 | awk '/平均时间/{print 100-\$NF}'" all --aggregate median
+```
+
+**差异分组（--diff）**：按输出内容分组，相同输出的主机归为一组（多数组置顶），适合**一致性检查/配置漂移排查**（配置、版本、密钥应一致的场景）：
+
+```bash
+# 检查集群 SSH 主机密钥是否一致（应一致，找出漂移的机器）
+fastdp shell -a 'md5sum /etc/ssh/ssh_host_rsa_key.pub' all --diff
+
+# 检查 NTP 配置是否一致
+fastdp shell -a 'cat /etc/ntp.conf' all --diff
+
+# 3/5 台输出一致，2 台漂移 → 一眼定位
+3/5 台 → 192.168.1.1, 192.168.1.2, 192.168.1.3 执行成功 output:
+a3c2e8d9f1b4...
+
+1/5 台 → 192.168.1.4 执行成功 output:
+b5e6f7a8c9d0...
+
+[OK] 5/5 成功
 ```
 
 #### 命令安全检查
@@ -393,7 +415,7 @@ fastdp fetch -r "/var/log/app" --recursive all
 
 ### 4. script（批量脚本）
 
-在远程主机上批量执行本地shell脚本。
+在远程主机上批量执行本地脚本。
 
 > script 子命令执行前会扫描脚本内容，危险命令（如 `rm -rf /`）会触发与 shell 子命令相同的安全拦截/确认机制。switch 模式下为命令清单，自动跳过安全检查和 `.sh` 后缀警告。
 
@@ -435,6 +457,30 @@ quit
 # 交换机：批量下发配置命令清单
 fastdp script -f switch-config.txt switches --mode switch
 ```
+
+**命令清单支持模板变量**（与 linux 模式相同的三个内置变量 + `--env` 自定义变量）：
+
+| 变量来源 | 示例 | 示例 |
+|---------|------|------|
+| 内置变量（自动替换） | `{{.ip}}` / `{{.port}}` / `{{.user}}` / `{{.addr}}` | 每台自动换成本机实际值 |
+| `--env` 自定义变量（switch 模式专用语义） | `--env "vlan_id=10 name=mgmt"` | 清单中的 `{{.vlan_id}}` `{{.name}}` 被替换 |
+
+```bash
+# 命令清单（vlan-template.cfg）
+system-view
+vlan {{.vlan_id}}
+description {{.name}}
+quit
+
+# 批量创建不同 VLAN（每台机器的 vlan_id/name 由 --env 传入）
+fastdp script -f vlan-template.cfg switches --mode switch --env "vlan_id=10 name=mgmt_vlan"
+```
+
+> **`--env` 在两种模式的语义差异**：
+> - **linux 模式**：`export` 环境变量注入（脚本内 `$VAR` 读取）
+> - **switch 模式**：模板变量注入（命令清单内 `{{.var}}` 替换，交换机 CLI 无环境变量概念）
+>
+> **`--args` 仅 linux 模式生效**（位置参数 `$1/$2`），switch 模式不支持（已忽略并提示改用 `--env`）。
 
 ![image-20260529175910671](./assets/script.png)
 

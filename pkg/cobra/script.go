@@ -6,9 +6,10 @@ import (
 	"fastdp/pkg/exitcode"
 	. "fastdp/utils"
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 var scriptCmd = &cobra.Command{
@@ -51,7 +52,7 @@ var scriptCmd = &cobra.Command{
 
 		return nil
 	},
- 	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			Errorf("请指定目标主机组或主机\n使用 --help 查看帮助信息\n示例:\n  fastdp script -f run.sh all\n  fastdp script -f check.sh web")
 			os.Exit(exitcode.ParamError)
@@ -71,9 +72,14 @@ var scriptCmd = &cobra.Command{
 		// 传递脚本参数和环境变量
 		scriptArgs, _ := cmd.Flags().GetString("args")
 		if scriptArgs != "" {
-			config.GlobalFlags.Parameter["script_args"] = scriptArgs
+			// switch 模式不适用位置参数（交换机 CLI 无 $1/$2 概念），提醒改用 --env 模板变量
+			if config.GlobalConfig.Mode == "switch" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "警告: switch 模式不支持 --args 位置参数，已忽略（请用 --env \"k=v\" 注入模板变量 {{.k}}）\n")
+			} else {
+				config.GlobalFlags.Parameter["script_args"] = scriptArgs
+			}
 		}
- 		scriptEnv, _ := cmd.Flags().GetString("env")
+		scriptEnv, _ := cmd.Flags().GetString("env")
 		if scriptEnv != "" {
 			// 验证环境变量格式必须为 KEY=VALUE
 			for _, pair := range strings.Fields(scriptEnv) {
@@ -84,7 +90,7 @@ var scriptCmd = &cobra.Command{
 			}
 			config.GlobalFlags.Parameter["script_env"] = scriptEnv
 		}
- 		summary, _ := cmd.Flags().GetBool("summary")
+		summary, _ := cmd.Flags().GetBool("summary")
 		if summary {
 			config.GlobalFlags.Parameter["summary"] = "true"
 		}
@@ -114,7 +120,7 @@ var scriptCmd = &cobra.Command{
 			os.Exit(exitcode.Success)
 		}
 
- 		// 脚本内容安全检查：硬拦截 / 确认（switch 模式为命令清单，无 bash 破坏性命令语义，跳过）
+		// 脚本内容安全检查：硬拦截 / 确认（switch 模式为命令清单，无 bash 破坏性命令语义，跳过）
 		yes, _ := cmd.Flags().GetBool("yes")
 		allowDangerous, _ := cmd.Flags().GetBool("allow-dangerous")
 		if config.GlobalConfig.Mode != "switch" && !enforceCommandSafety(string(content), execHosts, yes, allowDangerous) {
