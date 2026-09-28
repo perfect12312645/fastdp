@@ -80,15 +80,15 @@ sudo dpkg -i fastdp-v6.2.0-linux-amd64.deb
 fastdp --help
 ```
 
-RPM/DEB 安装后，二进制位于 `/usr/local/bin/`，配置文件位于 `/etc/fastdp/`。与方式二相同，默认以 root 身份执行。
+RPM/DEB 安装后，二进制位于 `/usr/local/bin/`，配置文件位于 `/etc/fastdp/`。与方式二相同，默认以 root 身份执行。`/etc/fastdp/host` 权限 600（仅 root 可读，可能含明文密码）。
 
-普通用户如需自定义配置，可复制到家目录（配置加载时家目录优先级最高）：
+普通用户如需自定义配置，可在家目录建个人配置（家目录配置优先级最高；`/etc/fastdp/host` 属 root 不可读，需自行创建 host 文件）：
 
 ```bash
 mkdir -p ~/.fastdp
 cp /etc/fastdp/config.toml ~/.fastdp/
-cp /etc/fastdp/host ~/.fastdp/
 cp /etc/fastdp/fastdp-check.sh ~/.fastdp/
+vim ~/.fastdp/host   # 自行填写个人主机清单（不能直接 cp /etc/fastdp/host）
 vim ~/.fastdp/config.toml
 # 将 host_inventory 的值改成家目录的绝对路径，如：
 # host_inventory = "/home/你的用户名/.fastdp/host"
@@ -175,6 +175,19 @@ chmod +x build.sh
 3. ./config.toml              （当前目录，兜底）
 ```
 
+**权限说明（多用户场景）：**
+- **root 用户**：`~/.fastdp/`（即 `/root/.fastdp/`）和 `/etc/fastdp/` 都可使用，`~/.fastdp/` 优先
+- **普通用户**：只能使用自己的 `~/.fastdp/`（`/etc/fastdp/host` 权限 600 属 root，普通用户不可读，属预期安全设计）
+- host 文件（含明文密码）安装后权限为 600，仅属主可读。普通用户使用前需自建个人配置：
+
+```bash
+# 普通用户首次使用（root 安装系统级后的个人配置）
+mkdir -p ~/.fastdp
+cp /etc/fastdp/config.toml ~/.fastdp/
+# host 需自行创建或按需修改（/etc/fastdp/host 不可读）
+vim ~/.fastdp/host
+```
+
 ## 巡检脚本路径优先级（check 子命令）
 
 ```
@@ -227,7 +240,7 @@ fastdp list
 # host 文件：H3C 用默认，Cisco 单独覆盖
 [switches]
 192.168.1.10                    # 默认 screen-length disable（H3C）
-192.168.1.20 paging_disable=terminal length 0   # Cisco
+192.168.1.20 paging_disable="terminal length 0"   # Cisco
 ```
 - 交互式终端执行（PTY），适配设备 CLI
 
@@ -625,6 +638,8 @@ mode = "linux"
 主机地址 [参数=值 ...]
 ```
 
+> **引号规则**：参数值含空格时才用双引号包裹（如 `paging_disable="terminal length 0"`）。正常密码/参数（无空格）直接写即可——即使包含引号或中文也原样保留（如 `password=abc"def`），无需加引号。
+
 主机地址支持 `[start:end:step]` 区间展开（零填充自动识别）：
 
 ```ini
@@ -640,7 +655,7 @@ node-103 password=special           # 例外主机：单独一行覆盖参数（
 | user     | SSH 登录用户               | root        |
 | port     | SSH 端口                   | 22          |
 | password | SSH 登录密码（空则密钥认证）| 空（密钥）  |
-| paging_disable | switch 模式分页禁用命令（如 Cisco 用 `terminal length 0`） | 空（用默认） |
+| paging_disable | switch 模式分页禁用命令（如 Cisco 用 `terminal length 0`；含空格用双引号包裹） | 空（用默认） |
 
 ### 示例
 

@@ -84,6 +84,8 @@ var rootCmd = &cobra.Command{
 		Debugf("初始化完成 debug=%v concurrency=%d timeout=%v retry-file=%s limit=%s host文件=%s",
 			config.GlobalFlags.Debug, config.GlobalFlags.Concurrency, config.GlobalFlags.Timeout,
 			config.GlobalFlags.RetryFile, config.GlobalFlags.Limit, config.GlobalConfig.HostInventory)
+		Debugf("执行模式:%s 历史记录:%v 历史日志:%s",
+			config.GlobalConfig.Mode, config.GlobalConfig.HistoryEnabled, config.GlobalConfig.HistoryLog)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help() // 显式输出帮助信息

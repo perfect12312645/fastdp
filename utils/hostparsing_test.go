@@ -132,6 +132,98 @@ func TestDeduplicateHostsLaterOverrides(t *testing.T) {
 	}
 }
 
+// 密码等值含引号/中文等复杂字符：应原样保留（引号只在 key= 后作为包裹符）
+func TestParseHostsFileSpecialChars(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/host"
+	content := "[db]\nmysql-1 password=abc\"def\nmysql-2 password=中文密码\n"
+	if err := writeTestFile(path, content); err != nil {
+		t.Fatal(err)
+	}
+
+	groups, err := ParseHostsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || len(groups[0].Hosts) != 2 {
+		t.Fatalf("解析结果异常: %+v", groups)
+	}
+	for _, h := range groups[0].Hosts {
+		switch h.Address {
+		case "mysql-1":
+			// 引号在值中间（非 key= 后），应字面保留
+			if got := h.Params["password"]; got != "abc\"def" {
+				t.Errorf("mysql-1 password = %q, want %q", got, "abc\"def")
+			}
+		case "mysql-2":
+			// 中文密码（UTF-8）应原样保留
+			if got := h.Params["password"]; got != "中文密码" {
+				t.Errorf("mysql-2 password = %q, want %q", got, "中文密码")
+			}
+		}
+	}
+}
+
 func writeTestFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// 引号内空格的值（如 paging_disable="screen-length disable"）应完整解析
+func TestParseHostsFileQuotedValue(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/host"
+	content := "[sw]\n192.168.1.20 paging_disable=\"screen-length disable\"\n"
+	if err := writeTestFile(path, content); err != nil {
+		t.Fatal(err)
+	}
+
+	groups, err := ParseHostsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || len(groups[0].Hosts) != 1 {
+		t.Fatalf("解析结果异常: %+v", groups)
+	}
+	h := groups[0].Hosts[0]
+	if got := h.Params["paging_disable"]; got != "screen-length disable" {
+		t.Errorf("paging_disable = %q, want %q (引号内空格被错误拆分)", got, "screen-length disable")
+	}
+}
+
+// 无引号的无空格值应保持原有行为（兼容旧写法）
+func TestParseHostsFileUnquotedCompat(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/host"
+	content := "[web]\nnode-1 user=root port=22 password=abc123\n"
+	if err := writeTestFile(path, content); err != nil {
+		t.Fatal(err)
+	}
+
+	groups, err := ParseHostsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := groups[0].Hosts[0]
+	if h.Params["user"] != "root" || h.Params["port"] != "22" || h.Params["password"] != "abc123" {
+		t.Errorf("无引号参数解析错误: %+v", h.Params)
+	}
+}
+
+// 未闭合引号（key="unclosed）：整行忽略 + 警告
+func TestParseHostsFileUnclosedQuote(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/host"
+	content := "[test]\nnode-1 key=\"unclosed\n"
+	if err := writeTestFile(path, content); err != nil {
+		t.Fatal(err)
+	}
+
+	groups, err := ParseHostsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 整行被忽略：组存在但没有任何主机
+	if len(groups) != 1 || len(groups[0].Hosts) != 0 {
+		t.Errorf("未闭合引号行应被忽略（组内无主机），got groups=%+v", groups)
+	}
 }

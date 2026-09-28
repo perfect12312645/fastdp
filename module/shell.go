@@ -133,7 +133,7 @@ func runSwitchCommands(hs HostSession, commands []string, flags *config.Flags) R
 	case <-time.After(waitTimeout):
 		return Result{
 			Success: false,
-			Output:  outputBuf.String(),
+			Output:  CleanTerminalOutput(outputBuf.String()),
 			Error:   "等待交换机输出超时",
 			Change:  false,
 		}
@@ -141,7 +141,7 @@ func runSwitchCommands(hs HostSession, commands []string, flags *config.Flags) R
 
 	return Result{
 		Success: true,
-		Output:  outputBuf.String(),
+		Output:  CleanTerminalOutput(outputBuf.String()),
 		Error:   "",
 		Change:  true,
 	}

@@ -61,7 +61,22 @@ func SshConnect(allHosts []*Host, moduleName string) ([]HostSession, map[string]
 				port = "22" // 最终兜底
 			}
 
-			Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"])
+			// 单行输出该主机全部连接信息（避免每台多行刷屏；分页禁用命令仅 switch 模式有意义）
+			if moduleName == "shell" && config.GlobalConfig.Mode == "switch" {
+				pd := config.GlobalFlags.Parameter["paging_disable"]
+				if pd == "" {
+					pd = host.Params["paging_disable"]
+				}
+				if pd == "" {
+					pd = config.GlobalConfig.PagingDisable
+				}
+				if pd == "" {
+					pd = "screen-length disable"
+				}
+				Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s,分页禁用:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"], pd)
+			} else {
+				Debugf("主机:%s,用户名:%s,ssh端口:%s,密码:%s", host.Address, host.Params["user"], host.Params["port"], host.Params["password"])
+			}
 
 			// 认证方式选择：免密优先（key），密码兜底，SSH 按顺序自动尝试
 			var authMethods []ssh.AuthMethod

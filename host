@@ -9,6 +9,10 @@
 #   password  - 登录密码（如不指定，需提前设置SSH免密登录）
 #   paging_disable - switch 模式分页禁用命令（默认 screen-length disable，混合设备按需覆盖：
 #                    Cisco: terminal length 0 / Huawei: screen-length 0 temporary）
+#                    值含空格时用双引号包裹：paging_disable="terminal length 0"
+#
+# 引号使用建议：只有值含空格时才加双引号 "..."。正常密码/参数（无空格）直接写即可——
+# 即使包含引号或中文也无需包裹，如 password=abc"def 会原样保留。
 
 # ============================================================
 # 主机区间展开（支持 [start:end:step]，零填充自动识别）

@@ -73,6 +73,7 @@ build_tar() {
         mkdir -p $PKG_DIR
         cp -a fastdp config.toml host fastdp-check.sh $PKG_DIR/ 2>/dev/null || true
         chmod 755 $PKG_DIR/fastdp
+        chmod 600 $PKG_DIR/host 2>/dev/null || true # host 含明文密码，收紧权限
         tar -zcvf "../$OUTPUT_DIR/$PKG_DIR.tar.gz" $PKG_DIR
         rm -rf $PKG_DIR
     done
@@ -106,6 +107,7 @@ build_rpm() {
     cp fastdp $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/
     chmod 755 $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/usr/local/bin/fastdp
     cp config.toml host fastdp-check.sh $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/ 2>/dev/null || true
+    chmod 600 $RPM_DIR/SOURCES/fastdp-$VERSION_NO_V/etc/fastdp/host 2>/dev/null || true # host 含明文密码，收紧权限
 
 cat > $RPM_DIR/SPECS/fastdp.spec <<EOF
 Name: fastdp
@@ -164,6 +166,7 @@ build_deb() {
     chmod 755 $DEB_DIR/usr/local/bin/fastdp
 
     cp config.toml host fastdp-check.sh $DEB_DIR/etc/fastdp/ 2>/dev/null || true
+    chmod 600 $DEB_DIR/etc/fastdp/host 2>/dev/null || true # host 含明文密码，收紧权限
 
     # 关键：DEB 架构必须是 amd64 / arm64
     cat > $DEB_DIR/DEBIAN/control <<EOF

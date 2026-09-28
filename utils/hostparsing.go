@@ -20,6 +20,55 @@ type HostGroup struct {
 	Hosts []*Host // 组内主机列表
 }
 
+// splitHostLine 按空白分割一行 host 配置。
+//
+// 双引号规则（仅双引号是转义字符，单引号一律字面保留）：
+//   - key="value with space"   → 双引号包裹，内部空格保留
+//   - key="unclosed            → 起始引号无配对 → 整行作废（返回 (nil, false)）
+//   - key=abc"def              → 引号前不是 "=" → 原样保留（合法的字面双引号）
+//
+// 返回 (分割结果, 是否合法)。仅当整行引号未闭合时返回 false。
+func splitHostLine(line string) (parts []string, ok bool) {
+	var result []string
+	var cur strings.Builder
+	inQuote := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case c == '"':
+			if inQuote {
+				inQuote = false
+				continue // 闭合引号不写入
+			}
+			// 仅当引号紧跟 "=" 后（即值起始处）进入包裹模式；否则作为字面字符
+			if cur.Len() > 0 && cur.String()[cur.Len()-1] == '=' {
+				inQuote = true
+				continue
+			}
+			cur.WriteByte(c) // 非值起始位置的引号 → 字面保留
+		case c == ' ' || c == '\t' || c == '\r' || c == '\n':
+			if !inQuote {
+				if cur.Len() > 0 {
+					result = append(result, cur.String())
+					cur.Reset()
+				}
+				continue
+			}
+			cur.WriteByte(c) // 引号内的空白保留
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	if cur.Len() > 0 {
+		result = append(result, cur.String())
+	}
+	if inQuote {
+		// 值起始处有引号但整行结束未见配对（如 key="abc，无闭合引号）
+		return nil, false
+	}
+	return result, true
+}
+
 // 解析 fastdp 的主机配置文件
 func ParseHostsFile(path string) ([]*HostGroup, error) {
 	file, err := os.Open(path)
@@ -65,7 +114,15 @@ func ParseHostsFile(path string) ([]*HostGroup, error) {
 		}
 
 		// 分割行：第一个元素是主机地址，剩下的是 key=value 参数
-		parts := strings.Fields(line) // 按空格分割（自动处理多个空格）
+		parts, ok := splitHostLine(line) // 按空白分割，支持引号内空格
+		if !ok || len(parts) == 0 {
+			fmt.Printf("警告：主机行 %q 引号未闭合，整行已忽略\n", line)
+			continue
+		}
+		if strings.HasPrefix(parts[0], "\"") || strings.HasPrefix(parts[0], "'") {
+			fmt.Printf("警告：主机行 %q 主机地址格式异常（不得以引号开头），整行已忽略\n", line)
+			continue
+		}
 
 		hostAddress := parts[0]
 		hostParams := make(map[string]string)
