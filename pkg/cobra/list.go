@@ -102,7 +102,7 @@ var listCmd = &cobra.Command{
 			fmt.Printf("[%s]  (%d 台)\n", g.Name, len(g.Hosts))
 			// 组内按地址排序
 			hosts := append([]*Host(nil), g.Hosts...)
-			sort.Slice(hosts, func(i, j int) bool { return hosts[i].Address < hosts[j].Address })
+			sort.Slice(hosts, func(i, j int) bool { return CompareAddr(hosts[i].Address, hosts[j].Address) < 0 })
 			for _, h := range hosts {
 				desc := h.Address
 				user := h.Params["user"]

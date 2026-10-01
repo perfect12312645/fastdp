@@ -264,8 +264,8 @@ func execute(hostSessions []HostSession, failedHosts map[string]ConnError, flags
 		addrs = append(addrs, addr)
 	}
 
-	// 按照IP地址排序（字符串排序）
-	sort.Strings(addrs)
+	// 按照IP地址排序（IPv4 按段数值比较，192.168.1.2 在 .19 前；域名回退字典序）
+	SortAddrs(addrs)
 
 	// 执行历史：每次执行写一条 JSON 元数据（不包含命令输出）
 	if config.GlobalConfig.HistoryEnabled && !config.GlobalFlags.NoHistory {
